@@ -1,0 +1,140 @@
+name: Build NGINX Container
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+    paths:
+      - 'nginx/**'
+      - '.github/workflows/build-nginx.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'nginx/**'
+      - '.github/workflows/build-nginx.yml'
+  workflow_dispatch:
+    inputs:
+      antragsgruen_version:
+        description: 'Antragsgruen version tag (e.g., v4.12.4)'
+        required: true
+        default: 'v4.12.4'
+
+env:
+  REGISTRY_DOCKERHUB: docker.io
+  REGISTRY_GHCR: ghcr.io
+  IMAGE_NAME: motion-tools-nginx
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_DOCKERHUB }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Antragsgruen version
+        id: antragsgruen
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.antragsgruen_version }}" >> $GITHUB_OUTPUT
+          else
+            # Extract from Dockerfile or use default
+            VERSION=$(grep -oP 'ARG ANTRAGSGRUEN_VERSION=\K.*' nginx/Dockerfile | head -1 || echo "v4.12.4")
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract container version
+        id: container
+        run: |
+          # Extract container version from git tag if available
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            # Expected format: v4.12.4+1 or 4.12.4+1
+            if [[ $TAG =~ \+([0-9]+)$ ]]; then
+              CONTAINER_VERSION="${BASH_REMATCH[1]}"
+              echo "version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
+            else
+              echo "version=1" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "version=1" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_DOCKERHUB }}/${{ secrets.DOCKERHUB_USERNAME || github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
+            type=raw,value=${{ steps.antragsgruen.outputs.version }},enable=${{ steps.container.outputs.version == '1' }}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ANTRAGSGRUEN_VERSION=${{ steps.antragsgruen.outputs.version }}
+            NGINX_VERSION=1.29-alpine3.22-otel
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Generate artifact attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

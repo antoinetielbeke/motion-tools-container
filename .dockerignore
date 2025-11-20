@@ -1,0 +1,26 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# Documentation
+README.md
+docs/
+*.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# CI/CD
+.github/
+
+# Examples
+examples/
+
+# Temporary
+tmp/
+temp/
+*.log
