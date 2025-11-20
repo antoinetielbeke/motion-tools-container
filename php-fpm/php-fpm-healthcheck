@@ -1,0 +1,36 @@
+#!/bin/sh
+# PHP-FPM Health Check Script
+# This script checks if PHP-FPM is responding properly
+
+set -e
+
+# Configuration
+FCGI_HOST="${PHP_FPM_HOST:-127.0.0.1}"
+FCGI_PORT="${PHP_FPM_PORT:-9000}"
+FCGI_STATUS_PATH="${PHP_FPM_STATUS_PATH:-/fpm-ping}"
+
+# Check if PHP-FPM is listening on the port
+if ! nc -z ${FCGI_HOST} ${FCGI_PORT} 2>/dev/null; then
+    echo "ERROR: PHP-FPM is not listening on ${FCGI_HOST}:${FCGI_PORT}"
+    exit 1
+fi
+
+# Use cgi-fcgi to check PHP-FPM status if available
+if command -v cgi-fcgi >/dev/null 2>&1; then
+    SCRIPT_NAME=${FCGI_STATUS_PATH} \
+    SCRIPT_FILENAME=${FCGI_STATUS_PATH} \
+    REQUEST_METHOD=GET \
+    cgi-fcgi -bind -connect ${FCGI_HOST}:${FCGI_PORT} 2>/dev/null | grep -q "pong"
+
+    if [ $? -eq 0 ]; then
+        echo "OK: PHP-FPM is healthy"
+        exit 0
+    else
+        echo "ERROR: PHP-FPM status check failed"
+        exit 1
+    fi
+else
+    # Fallback: Just check if the port is open
+    echo "OK: PHP-FPM is listening (cgi-fcgi not available for full check)"
+    exit 0
+fi

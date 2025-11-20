@@ -1,0 +1,74 @@
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: motion-tools-ingress
+  namespace: motion-tools
+  annotations:
+    # Uncomment and adjust based on your ingress controller
+    # nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Rate limiting (adjust based on ingress controller)
+    # nginx.ingress.kubernetes.io/limit-rps: "10"
+    # nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+
+    # Session affinity
+    # nginx.ingress.kubernetes.io/affinity: "cookie"
+    # nginx.ingress.kubernetes.io/session-cookie-name: "motion-tools-affinity"
+    # nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    # nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+
+spec:
+  ingressClassName: nginx  # Adjust based on your cluster
+  rules:
+  - host: motion.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: motion-tools-nginx-service
+            port:
+              number: 80
+
+  # TLS configuration (uncomment and adjust)
+  # tls:
+  # - hosts:
+  #   - motion.example.com
+  #   - "*.motion.example.com"  # For subdomain support
+  #   secretName: motion-tools-tls
+
+---
+# Ingress for subdomain support (if using multisiteMode)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: motion-tools-ingress-subdomain
+  namespace: motion-tools
+  annotations:
+    # Same annotations as above
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "*.motion.example.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: motion-tools-nginx-service
+            port:
+              number: 80
+
+  # TLS configuration (uncomment and adjust)
+  # tls:
+  # - hosts:
+  #   - "*.motion.example.com"
+  #   secretName: motion-tools-wildcard-tls

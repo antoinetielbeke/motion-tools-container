@@ -1,0 +1,27 @@
+# Kustomization for Motion Tools Kubernetes deployment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: motion-tools
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+# You can add patches, commonLabels, etc. here
+commonLabels:
+  app: motion-tools
+  managed-by: kustomize
+
+# Example: Override image tags
+# images:
+#   - name: ghcr.io/yourusername/motion-tools-php
+#     newTag: v4.12.4+1
+#   - name: ghcr.io/yourusername/motion-tools-nginx
+#     newTag: v4.12.4+1

@@ -1,0 +1,9 @@
+---
+# Namespace for Motion Tools
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: motion-tools
+  labels:
+    app: motion-tools
+    environment: production

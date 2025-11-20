@@ -1,0 +1,22 @@
+# msmtp configuration for Antragsgruen
+# This file is generated from template by docker-entrypoint.sh
+
+# Default settings
+defaults
+auth           ${SMTP_AUTH:-on}
+tls            ${SMTP_TLS:-on}
+tls_starttls   ${SMTP_STARTTLS:-on}
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /proc/self/fd/2
+syslog         off
+
+# Account configuration
+account        default
+host           ${SMTP_HOST:-localhost}
+port           ${SMTP_PORT:-587}
+from           ${SMTP_FROM:-noreply@example.com}
+user           ${SMTP_USER}
+password       ${SMTP_PASSWORD}
+
+# Set default account
+account default : default

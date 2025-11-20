@@ -1,0 +1,68 @@
+---
+# Service for PHP-FPM
+apiVersion: v1
+kind: Service
+metadata:
+  name: motion-tools-php-service
+  namespace: motion-tools
+  labels:
+    app: motion-tools
+    component: php-fpm
+spec:
+  type: ClusterIP
+  selector:
+    app: motion-tools
+    component: php-fpm
+  ports:
+  - name: php-fpm
+    port: 9000
+    targetPort: 9000
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Service for NGINX
+apiVersion: v1
+kind: Service
+metadata:
+  name: motion-tools-nginx-service
+  namespace: motion-tools
+  labels:
+    app: motion-tools
+    component: nginx
+spec:
+  type: ClusterIP
+  selector:
+    app: motion-tools
+    component: nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# Headless Service for PHP-FPM (for direct pod access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: motion-tools-php-headless
+  namespace: motion-tools
+  labels:
+    app: motion-tools
+    component: php-fpm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: motion-tools
+    component: php-fpm
+  ports:
+  - name: php-fpm
+    port: 9000
+    targetPort: 9000
+    protocol: TCP

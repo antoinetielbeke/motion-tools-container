@@ -1,0 +1,44 @@
+---
+# PersistentVolumeClaim for Application Runtime Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: motion-tools-runtime
+  namespace: motion-tools
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: default  # Adjust based on your cluster
+
+---
+# PersistentVolumeClaim for Web Assets
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: motion-tools-assets
+  namespace: motion-tools
+spec:
+  accessModes:
+    - ReadWriteMany  # Shared between PHP and NGINX pods
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: nfs  # Use a storage class that supports ReadWriteMany
+
+---
+# PersistentVolumeClaim for Application Config
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: motion-tools-config
+  namespace: motion-tools
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: default

@@ -1,0 +1,168 @@
+---
+# ConfigMap for Antragsgruen Application Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: motion-tools-config
+  namespace: motion-tools
+data:
+  # Antragsgruen config.json
+  config.json: |
+    {
+      "dbConnection": {
+        "dsn": "mysql:host=mariadb;dbname=antragsgruen",
+        "username": "antragsgruen",
+        "password": "REPLACE_WITH_SECRET",
+        "charset": "utf8mb4",
+        "emulatePrepare": true
+      },
+      "mailService": {
+        "transport": "sendmail"
+      },
+      "multisiteMode": true,
+      "domainPlain": "https://motion.example.com/",
+      "domainSubdomain": "https://<subdomain:[\\w_-]+>.motion.example.com/",
+      "randomSeed": "REPLACE_WITH_SECRET"
+    }
+
+---
+# ConfigMap for PHP Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: motion-tools-php-config
+  namespace: motion-tools
+data:
+  zz-antragsgruen.ini: |
+    [PHP]
+    memory_limit = 512M
+    max_execution_time = 300
+    max_input_time = 300
+    upload_max_filesize = 32M
+    post_max_size = 40M
+    max_file_uploads = 20
+    display_errors = Off
+    display_startup_errors = Off
+    error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+    log_errors = On
+    error_log = /proc/self/fd/2
+    date.timezone = UTC
+    expose_php = Off
+    opcache.enable = 1
+    opcache.memory_consumption = 256
+    opcache.interned_strings_buffer = 16
+    opcache.max_accelerated_files = 10000
+    opcache.revalidate_freq = 2
+    session.save_handler = redis
+    session.save_path = "tcp://redis:6379"
+    session.gc_maxlifetime = 3600
+    session.cookie_httponly = On
+    session.cookie_samesite = Lax
+    default_charset = "UTF-8"
+
+  zz-antragsgruen.conf: |
+    [www]
+    user = www-data
+    group = www-data
+    listen = 0.0.0.0:9000
+    pm = dynamic
+    pm.max_children = 50
+    pm.start_servers = 5
+    pm.min_spare_servers = 5
+    pm.max_spare_servers = 35
+    pm.max_requests = 500
+    pm.status_path = /fpm-status
+    ping.path = /fpm-ping
+    access.log = /proc/self/fd/2
+    catch_workers_output = yes
+    clear_env = no
+    request_terminate_timeout = 300s
+    request_slowlog_timeout = 30s
+    slowlog = /proc/self/fd/2
+
+---
+# ConfigMap for NGINX Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: motion-tools-nginx-config
+  namespace: motion-tools
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 2048;
+        use epoll;
+        multi_accept on;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" rt=$request_time';
+
+        access_log /var/log/nginx/access.log main;
+
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        server_tokens off;
+
+        client_max_body_size 32M;
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+        include /etc/nginx/conf.d/*.conf;
+    }
+
+  default.conf: |
+    upstream php-fpm {
+        server localhost:9000;
+        keepalive 16;
+    }
+
+    server {
+        listen 8080 default_server;
+        server_name _;
+        root /var/www/html/web;
+        index index.php;
+
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+        }
+
+        location ~ /\. {
+            deny all;
+        }
+
+        location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2)$ {
+            expires 7d;
+            access_log off;
+        }
+
+        location / {
+            try_files $uri /index.php$is_args$args;
+        }
+
+        location ~ \.php$ {
+            try_files $uri =404;
+            include fastcgi_params;
+            fastcgi_pass php-fpm;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_read_timeout 300s;
+            fastcgi_buffers 16 32k;
+            fastcgi_buffer_size 32k;
+        }
+    }

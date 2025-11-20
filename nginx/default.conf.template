@@ -1,0 +1,172 @@
+# NGINX Server Configuration for Antragsgruen
+# This file can be customized via ConfigMap in Kubernetes
+
+upstream php-fpm {
+    server ${PHP_FPM_HOST:-php-fpm}:${PHP_FPM_PORT:-9000};
+    keepalive ${NGINX_UPSTREAM_KEEPALIVE:-16};
+}
+
+# Rate limiting zones
+limit_req_zone $binary_remote_addr zone=general:${NGINX_RATE_LIMIT_MEMORY:-10m} rate=${NGINX_RATE_LIMIT:-10r/s};
+limit_req_zone $binary_remote_addr zone=api:10m rate=${NGINX_API_RATE_LIMIT:-60r/m};
+
+server {
+    listen ${NGINX_PORT:-80} default_server;
+    listen [::]:${NGINX_PORT:-80} default_server;
+
+    server_name ${NGINX_SERVER_NAME:-_};
+    root /var/www/html/web;
+    index index.php index.html;
+
+    # Charset
+    charset utf-8;
+
+    # Logging
+    access_log /var/log/nginx/access.log ${NGINX_LOG_FORMAT:-main};
+    error_log  /var/log/nginx/error.log ${NGINX_LOG_LEVEL:-warn};
+
+    # Rate limiting
+    limit_req zone=general burst=${NGINX_RATE_LIMIT_BURST:-20} nodelay;
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+
+    # PHP-FPM status endpoints (for monitoring)
+    location ~ ^/(fpm-status|fpm-ping)$ {
+        access_log off;
+        allow 127.0.0.1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny all;
+
+        include fastcgi_params;
+        fastcgi_pass php-fpm;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    # Block access to sensitive files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~ ^/(config|runtime|vendor|node_modules|tests|docs)/ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Block access to sensitive file types
+    location ~* \.(yml|yaml|json|lock|md|dist|sh|sql|bak|swp|tmp)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Static files caching
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp)$ {
+        expires ${NGINX_STATIC_CACHE_TIME:-7d};
+        add_header Cache-Control "${NGINX_STATIC_CACHE_CONTROL:-public, immutable}";
+        access_log off;
+        try_files $uri =404;
+    }
+
+    # Assets directory
+    location /assets/ {
+        expires ${NGINX_ASSETS_CACHE_TIME:-7d};
+        add_header Cache-Control "${NGINX_ASSETS_CACHE_CONTROL:-public}";
+        access_log off;
+        try_files $uri =404;
+    }
+
+    # Robots.txt
+    location = /robots.txt {
+        access_log off;
+        log_not_found off;
+        try_files $uri =404;
+    }
+
+    # Favicon
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+        try_files $uri =404;
+    }
+
+    # API endpoints with different rate limiting
+    location /rest/ {
+        limit_req zone=api burst=10 nodelay;
+        try_files $uri /index.php$is_args$args;
+    }
+
+    # Main application location
+    location / {
+        # Try to serve file directly, fallback to front controller
+        try_files $uri /index.php$is_args$args;
+    }
+
+    # PHP-FPM processing
+    location ~ \.php$ {
+        # Security: Don't allow arbitrary PHP execution
+        try_files $uri =404;
+
+        # FastCGI configuration
+        include fastcgi_params;
+        fastcgi_pass php-fpm;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param DOCUMENT_ROOT $document_root;
+
+        # Increase timeouts for long-running operations
+        fastcgi_connect_timeout ${NGINX_FASTCGI_CONNECT_TIMEOUT:-60s};
+        fastcgi_send_timeout    ${NGINX_FASTCGI_SEND_TIMEOUT:-300s};
+        fastcgi_read_timeout    ${NGINX_FASTCGI_READ_TIMEOUT:-300s};
+
+        # Buffer configuration
+        fastcgi_buffer_size          ${NGINX_FASTCGI_BUFFER_SIZE:-32k};
+        fastcgi_buffers              ${NGINX_FASTCGI_BUFFERS:-16 32k};
+        fastcgi_busy_buffers_size    ${NGINX_FASTCGI_BUSY_BUFFERS_SIZE:-64k};
+        fastcgi_temp_file_write_size ${NGINX_FASTCGI_TEMP_FILE_WRITE_SIZE:-64k};
+
+        # Prevent httpoxy vulnerability
+        fastcgi_param HTTP_PROXY "";
+
+        # Enable keepalive to PHP-FPM
+        fastcgi_keep_conn on;
+    }
+
+    # Deny all other .php files in subdirectories (security)
+    location ~* ^.+\.php/.*$ {
+        deny all;
+    }
+}
+
+# HTTPS server configuration (uncomment and configure if using TLS)
+# server {
+#     listen 443 ssl http2;
+#     listen [::]:443 ssl http2;
+#
+#     server_name ${NGINX_SERVER_NAME:-_};
+#     root /var/www/html/web;
+#     index index.php index.html;
+#
+#     # SSL configuration
+#     ssl_certificate     /etc/nginx/ssl/tls.crt;
+#     ssl_certificate_key /etc/nginx/ssl/tls.key;
+#     ssl_protocols       TLSv1.2 TLSv1.3;
+#     ssl_ciphers         HIGH:!aNULL:!MD5;
+#     ssl_prefer_server_ciphers on;
+#
+#     # HSTS
+#     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+#
+#     # Include all location blocks from above
+#     include /etc/nginx/conf.d/locations.conf;
+# }
