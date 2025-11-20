@@ -113,7 +113,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
             type=raw,value=${{ steps.antragsgruen.outputs.version }},enable=${{ steps.container.outputs.version == '1' }}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
 
       - name: Build and push
         uses: docker/build-push-action@v5
