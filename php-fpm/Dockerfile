@@ -112,6 +112,8 @@ RUN apk add --no-cache \
     ca-certificates \
     mysql-client \
     netcat-openbsd \
+    gettext \
+    su-exec \
     && rm -rf /var/cache/apk/*
 
 # Install PHP extensions (copy from builder or install again)
@@ -162,9 +164,6 @@ EXPOSE 9000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
     CMD php-fpm-healthcheck || exit 1
 
-# Use custom entrypoint
+# Use custom entrypoint (runs as root, drops to www-data)
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["php-fpm"]
-
-# Run as www-data user
-USER www-data

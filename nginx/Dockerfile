@@ -18,7 +18,7 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Copy NGINX configuration templates
-COPY nginx.conf.template /etc/nginx/templates/nginx.conf.template
+# Note: nginx.conf is provided by base image, we only customize server blocks
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY docker-entrypoint.sh /docker-entrypoint.d/40-motion-tools-setup.sh
 

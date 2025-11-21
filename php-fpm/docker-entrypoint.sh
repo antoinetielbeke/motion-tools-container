@@ -42,6 +42,7 @@ chmod 775 /var/www/html/config 2>/dev/null || true
 
 # Process PHP configuration template
 if [ -f /usr/local/etc/php/conf.d/zz-antragsgruen.ini.template ]; then
+    echo "[entrypoint] Processing PHP configuration template"
     envsubst_template \
         /usr/local/etc/php/conf.d/zz-antragsgruen.ini.template \
         /usr/local/etc/php/conf.d/zz-antragsgruen.ini
@@ -49,6 +50,7 @@ fi
 
 # Process PHP-FPM configuration template
 if [ -f /usr/local/etc/php-fpm.d/zz-antragsgruen.conf.template ]; then
+    echo "[entrypoint] Processing PHP-FPM configuration template"
     envsubst_template \
         /usr/local/etc/php-fpm.d/zz-antragsgruen.conf.template \
         /usr/local/etc/php-fpm.d/zz-antragsgruen.conf
@@ -106,5 +108,6 @@ echo "  - Mailer DSN: ${MAILER_DSN:+configured}"
 echo "  - Database Host: ${DB_HOST:-not set}"
 echo "  - Redis Host: ${REDIS_HOST:-not configured}"
 
-echo "[entrypoint] Starting PHP-FPM"
+echo "[entrypoint] Starting PHP-FPM (will drop to www-data internally)"
+# PHP-FPM starts as root and drops to www-data via its own configuration
 exec "$@"
