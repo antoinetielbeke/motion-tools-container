@@ -116,6 +116,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./nginx
@@ -138,3 +139,15 @@ jobs:
           subject-name: ${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      - name: Push to Cloudsmith
+        if: github.event_name != 'pull_request'
+        uses: cloudsmith-io/action@7af394e0f8add4867bce109385962dafecad1b8d # v0.6.14
+        with:
+          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+          command: "push"
+          format: "docker"
+          owner: "tielbeke"
+          repo: "tielbeke"
+          republish: true
+          file: "${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}"
