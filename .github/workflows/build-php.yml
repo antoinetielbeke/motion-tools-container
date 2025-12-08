@@ -25,8 +25,8 @@ on:
         default: 'v4.12.4'
 
 env:
-  REGISTRY_DOCKERHUB: docker.io
-  REGISTRY_GHCR: ghcr.io
+  CLOUDSMITH_REGISTRY: docker.cloudsmith.io
+  CLOUDSMITH_NAMESPACE: tielbeke/tielbeke
   IMAGE_NAME: motion-tools-php
 
 jobs:
@@ -34,8 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -53,21 +51,13 @@ jobs:
             image=moby/buildkit:latest
             network=host
 
-      - name: Log in to Docker Hub
+      - name: Log in to Cloudsmith Docker Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY_DOCKERHUB }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY_GHCR }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.CLOUDSMITH_REGISTRY }}
+          username: ${{ secrets.CLOUDSMITH_USERNAME }}
+          password: ${{ secrets.CLOUDSMITH_API_KEY }}
 
       - name: Extract Antragsgruen version
         id: antragsgruen
@@ -102,21 +92,22 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.REGISTRY_DOCKERHUB }}/${{ secrets.DOCKERHUB_USERNAME || github.repository_owner }}/${{ env.IMAGE_NAME }}
-            ${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ${{ env.CLOUDSMITH_REGISTRY }}/${{ env.CLOUDSMITH_NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
             type=raw,value=${{ steps.antragsgruen.outputs.version }},enable=${{ steps.container.outputs.version == '1' }}
-            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.description=PHP-FPM container for Antragsgruen
+            org.opencontainers.image.vendor=tielbeke
+            org.opencontainers.image.version=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
+            io.cloudsmith.package.antragsgruen-version=${{ steps.antragsgruen.outputs.version }}
+            io.cloudsmith.package.container-version=${{ steps.container.outputs.version }}
 
-      - name: Build and push
-        id: build
+      - name: Build and push to Cloudsmith
         uses: docker/build-push-action@v5
         with:
           context: ./php-fpm
@@ -131,23 +122,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-
-      - name: Generate artifact attestation
-        if: github.event_name != 'pull_request'
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-      - name: Push to Cloudsmith
-        if: github.event_name != 'pull_request'
-        uses: cloudsmith-io/action@7af394e0f8add4867bce109385962dafecad1b8d # v0.6.14
-        with:
-          api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
-          command: "push"
-          format: "docker"
-          owner: "tielbeke"
-          repo: "tielbeke"
-          republish: true
-          file: "${{ env.REGISTRY_GHCR }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}"
