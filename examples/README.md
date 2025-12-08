@@ -50,7 +50,7 @@ open http://localhost:8080
 - **redis**: Redis 7 cache
 - **php-fpm**: PHP-FPM application container
 - **nginx**: NGINX web server
-- **mailhog**: Email testing tool (dev profile only)
+- **mailpit**: Email testing tool (dev profile only)
 
 ### Useful Commands
 
@@ -79,13 +79,13 @@ docker-compose down -v
 
 ### Development Mode
 
-To start with MailHog for email testing:
+To start with Mailpit for email testing:
 
 ```bash
 docker-compose --profile dev up -d
 ```
 
-Access MailHog web UI at: http://localhost:8025
+Access Mailpit web UI at: http://localhost:8025
 
 ### Troubleshooting Docker Compose
 

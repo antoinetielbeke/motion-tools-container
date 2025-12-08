@@ -99,7 +99,7 @@ if [ ! -f /var/www/html/config/config.json ]; then
         export BASE_LANGUAGE="${BASE_LANGUAGE:-en}"
         export MAIL_FROM_EMAIL="${MAIL_FROM_EMAIL:-noreply@localhost}"
         export MAIL_FROM_NAME="${MAIL_FROM_NAME:-Antragsgruen}"
-        export SMTP_HOST="${SMTP_HOST:-mailhog}"
+        export SMTP_HOST="${SMTP_HOST:-mailpit}"
         export SMTP_PORT="${SMTP_PORT:-1025}"
         export SMTP_AUTH_TYPE="${SMTP_AUTH_TYPE:-none}"
         export SMTP_USERNAME="${SMTP_USERNAME:-}"

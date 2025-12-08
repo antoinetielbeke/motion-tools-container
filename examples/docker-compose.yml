@@ -81,7 +81,7 @@ services:
       REDIS_PORT: 6379
 
       # SMTP Configuration
-      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_AUTH_TYPE: ${SMTP_AUTH_TYPE:-none}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -189,14 +189,18 @@ services:
       retries: 3
       start_period: 10s
 
-  # MailHog for testing email (optional, for development)
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: motion-tools-mailhog
+  # Mailpit for testing email (optional, for development)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: motion-tools-mailpit
     restart: unless-stopped
     ports:
-      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP
-      - "${MAILHOG_WEB_PORT:-8025}:8025"   # Web UI
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"  # SMTP
+      - "${MAILPIT_WEB_PORT:-8025}:8025"   # Web UI
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
     networks:
       - motion-tools
     profiles:

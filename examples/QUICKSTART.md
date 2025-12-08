@@ -49,7 +49,7 @@ Wait for the message: `[init-db] Database initialization complete!`
 Open your browser and navigate to:
 
 - **Main Application**: http://localhost:8080
-- **Email Viewer (MailHog)**: http://localhost:8025
+- **Email Viewer (Mailpit)**: http://localhost:8025
 
 You should see the "Main Consultation" homepage!
 
@@ -61,7 +61,7 @@ The quickstart uses single-site mode with these defaults:
 - **Site Name**: Demo Site
 - **Consultation**: Main Consultation (path: `/main`)
 - **Database**: Auto-initialized on first run
-- **Email**: Captured by MailHog (check port 8025)
+- **Email**: Captured by Mailpit (check port 8025)
 
 ## Common Tasks
 
