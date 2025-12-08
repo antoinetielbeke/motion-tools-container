@@ -81,7 +81,6 @@ RUN mkdir -p \
     runtime/logs \
     web/assets \
     config \
-    && touch config/config.json \
     && chmod -R 777 runtime web/assets config
 
 ###############################################################################
@@ -143,12 +142,15 @@ COPY --from=builder --chown=www-data:www-data /build /var/www/html
 # Copy PHP configuration templates
 COPY php.ini.template /usr/local/etc/php/conf.d/zz-antragsgruen.ini.template
 COPY php-fpm.conf.template /usr/local/etc/php-fpm.d/zz-antragsgruen.conf.template
+COPY config.json.template /usr/local/etc/config.json.template
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY init-db.sh /usr/local/bin/init-db.sh
 COPY php-fpm-healthcheck /usr/local/bin/php-fpm-healthcheck
 COPY msmtprc.template /etc/msmtprc.template
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/init-db.sh \
     && chmod +x /usr/local/bin/php-fpm-healthcheck
 
 # Create volumes for persistent data

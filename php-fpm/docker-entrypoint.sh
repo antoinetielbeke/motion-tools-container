@@ -81,14 +81,73 @@ if [ -z "$MAILER_DSN" ] && [ -n "$SMTP_HOST" ]; then
     echo "[entrypoint] Configured MAILER_DSN for Symfony Mailer"
 fi
 
-# Initialize config.json if it doesn't exist and ANTRAGSGRUEN_CONFIG_JSON is provided
-if [ ! -f /var/www/html/config/config.json ] && [ -n "$ANTRAGSGRUEN_CONFIG_JSON" ]; then
-    echo "[entrypoint] Initializing config.json from ANTRAGSGRUEN_CONFIG_JSON"
-    echo "$ANTRAGSGRUEN_CONFIG_JSON" > /var/www/html/config/config.json
-    chmod 664 /var/www/html/config/config.json
-elif [ ! -f /var/www/html/config/config.json ]; then
-    echo "[entrypoint] WARNING: config.json not found. Application may not work correctly."
-    echo "[entrypoint] Please mount a ConfigMap or provide ANTRAGSGRUEN_CONFIG_JSON environment variable."
+# Initialize config.json from template if it doesn't exist
+if [ ! -f /var/www/html/config/config.json ]; then
+    if [ -f /usr/local/etc/config.json.template ]; then
+        echo "[entrypoint] Generating config.json from template"
+        # Set defaults for required variables if not provided
+        export DB_HOST="${DB_HOST:-db}"
+        export DB_NAME="${DB_NAME:-antragsgruen}"
+        export DB_USER="${DB_USER:-antragsgruen}"
+        export REDIS_HOST="${REDIS_HOST:-redis}"
+        export REDIS_PORT="${REDIS_PORT:-6379}"
+        export REDIS_DB="${REDIS_DB:-0}"
+        export DOMAIN="${DOMAIN:-localhost:8080}"
+        export PROTOCOL="${PROTOCOL:-http}"
+        export MULTISITE_MODE="${MULTISITE_MODE:-false}"
+        export PREPEND_WWW="${PREPEND_WWW:-false}"
+        export BASE_LANGUAGE="${BASE_LANGUAGE:-en}"
+        export MAIL_FROM_EMAIL="${MAIL_FROM_EMAIL:-noreply@localhost}"
+        export MAIL_FROM_NAME="${MAIL_FROM_NAME:-Antragsgruen}"
+        export SMTP_HOST="${SMTP_HOST:-mailpit}"
+        export SMTP_PORT="${SMTP_PORT:-1025}"
+        export SMTP_AUTH_TYPE="${SMTP_AUTH_TYPE:-none}"
+        export SMTP_USERNAME="${SMTP_USERNAME:-}"
+        export SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+        export XELATEX_PATH="${XELATEX_PATH:-}"
+        export XDVIPDFMX_PATH="${XDVIPDFMX_PATH:-}"
+        export PDFUNITE_PATH="${PDFUNITE_PATH:-}"
+        
+        # Generate config.json using envsubst with explicit variable list
+        envsubst '${DB_HOST} ${DB_NAME} ${DB_USER} ${DB_PASSWORD} ${REDIS_HOST} ${REDIS_PORT} ${REDIS_DB} ${MULTISITE_MODE} ${DOMAIN} ${PREPEND_WWW} ${PROTOCOL} ${BASE_LANGUAGE} ${RANDOM_SEED} ${MAIL_FROM_EMAIL} ${MAIL_FROM_NAME} ${SMTP_HOST} ${SMTP_PORT} ${SMTP_AUTH_TYPE} ${SMTP_USERNAME} ${SMTP_PASSWORD} ${XELATEX_PATH} ${XDVIPDFMX_PATH} ${PDFUNITE_PATH}' \
+            < /usr/local/etc/config.json.template > /var/www/html/config/config.json
+        
+        # For single-site mode, add siteSubdomain configuration
+        if [ "$ANTRAGSGRUEN_MODE" = "single-site" ]; then
+            echo "[entrypoint] Configuring for single-site mode"
+            # Use jq-like sed to add siteSubdomain after multisiteMode
+            # For single-site: use simple domain paths and specify which site subdomain to load
+            sed -i 's/"multisiteMode": false,/"multisiteMode": false,\n    "siteSubdomain": "std",/' /var/www/html/config/config.json
+            sed -i 's|"domainPlain": ".*"|"domainPlain": "/"|' /var/www/html/config/config.json
+            sed -i 's|"domainSubdomain": ".*"|"domainSubdomain": ""|' /var/www/html/config/config.json
+            sed -i 's|"resourceBase": ".*"|"resourceBase": "/"|' /var/www/html/config/config.json
+        fi
+        
+        chmod 664 /var/www/html/config/config.json
+        echo "[entrypoint] config.json generated successfully"
+    elif [ -n "$ANTRAGSGRUEN_CONFIG_JSON" ]; then
+        echo "[entrypoint] Initializing config.json from ANTRAGSGRUEN_CONFIG_JSON (deprecated)"
+        echo "$ANTRAGSGRUEN_CONFIG_JSON" > /var/www/html/config/config.json
+        chmod 664 /var/www/html/config/config.json
+    else
+        echo "[entrypoint] ERROR: config.json not found and no template available."
+        echo "[entrypoint] Please provide configuration via template or ANTRAGSGRUEN_CONFIG_JSON."
+        exit 1
+    fi
+else
+    echo "[entrypoint] Using existing config.json"
+fi
+
+# Initialize database if AUTO_INIT_DB is enabled (default: true for development)
+if [ "${AUTO_INIT_DB:-true}" = "true" ]; then
+    if [ -f /usr/local/bin/init-db.sh ]; then
+        echo "[entrypoint] Running database initialization"
+        . /usr/local/bin/init-db.sh
+    else
+        echo "[entrypoint] WARNING: init-db.sh not found, skipping database initialization"
+    fi
+else
+    echo "[entrypoint] Database auto-initialization disabled (AUTO_INIT_DB=false)"
 fi
 
 # Run database migrations if requested

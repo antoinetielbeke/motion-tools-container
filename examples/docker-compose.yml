@@ -80,38 +80,32 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
 
-      # SMTP Configuration (Symfony Mailer)
-      MAILER_DSN: ${MAILER_DSN:-smtp://localhost:1025}
-      # Or individual settings:
-      # SMTP_HOST: smtp.example.com
-      # SMTP_PORT: 587
-      # SMTP_USER: noreply@example.com
-      # SMTP_PASSWORD: secret
-      # SMTP_FROM: noreply@example.com
-      # SMTP_AUTH: on
-      # SMTP_TLS: on
-      # SMTP_STARTTLS: on
+      # SMTP Configuration
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_AUTH_TYPE: ${SMTP_AUTH_TYPE:-none}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-noreply@localhost}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Antragsgruen}
 
       # Application Configuration
-      ANTRAGSGRUEN_CONFIG_JSON: |
-        {
-          "dbConnection": {
-            "dsn": "mysql:host=db;dbname=${DB_NAME:-antragsgruen}",
-            "username": "${DB_USER:-antragsgruen}",
-            "password": "${DB_PASSWORD:-antragsgruen}",
-            "charset": "utf8mb4",
-            "emulatePrepare": true
-          },
-          "mailService": {
-            "transport": "sendmail"
-          },
-          "multisiteMode": true,
-          "domainPlain": "https://${DOMAIN:-localhost}/",
-          "domainSubdomain": "https://<subdomain:[\\w_-]+>.${DOMAIN:-localhost}/",
-          "randomSeed": "${RANDOM_SEED:-CHANGE_THIS_TO_RANDOM_VALUE}"
-        }
+      DOMAIN: ${DOMAIN:-localhost:8080}
+      PROTOCOL: ${PROTOCOL:-http}
+      MULTISITE_MODE: ${MULTISITE_MODE:-false}
+      BASE_LANGUAGE: ${BASE_LANGUAGE:-en}
+      RANDOM_SEED: ${RANDOM_SEED}
+      
+      # Database Initialization (auto-init for development, disable for production)
+      AUTO_INIT_DB: ${AUTO_INIT_DB:-true}
+      ANTRAGSGRUEN_MODE: ${ANTRAGSGRUEN_MODE:-single-site}
+      DEFAULT_SITE_SUBDOMAIN: ${DEFAULT_SITE_SUBDOMAIN:-demo}
+      DEFAULT_SITE_TITLE: ${DEFAULT_SITE_TITLE:-Demo Site}
+      DEFAULT_SITE_ORG: ${DEFAULT_SITE_ORG:-Demo Organization}
+      DEFAULT_CONSULTATION_TITLE: ${DEFAULT_CONSULTATION_TITLE:-Main Consultation}
+      DEFAULT_CONSULTATION_PATH: ${DEFAULT_CONSULTATION_PATH:-main}
 
-      # Run migrations on startup (optional)
+      # Run migrations on startup (optional, not needed if AUTO_INIT_DB=true)
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
 
     volumes:
@@ -195,14 +189,18 @@ services:
       retries: 3
       start_period: 10s
 
-  # MailHog for testing email (optional, for development)
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: motion-tools-mailhog
+  # Mailpit for testing email (optional, for development)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: motion-tools-mailpit
     restart: unless-stopped
     ports:
-      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP
-      - "${MAILHOG_WEB_PORT:-8025}:8025"   # Web UI
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"  # SMTP
+      - "${MAILPIT_WEB_PORT:-8025}:8025"   # Web UI
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
     networks:
       - motion-tools
     profiles:
