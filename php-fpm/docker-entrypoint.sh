@@ -59,6 +59,24 @@ fi
 # Configure msmtp for mail sending
 if [ -n "$SMTP_HOST" ]; then
     echo "[entrypoint] Configuring msmtp for SMTP"
+    
+    # Set defaults for msmtp configuration
+    export SMTP_HOST="${SMTP_HOST:-localhost}"
+    export SMTP_PORT="${SMTP_PORT:-587}"
+    export SMTP_FROM="${SMTP_FROM:-noreply@example.com}"
+    export SMTP_AUTH="${SMTP_AUTH:-off}"
+    export SMTP_TLS="${SMTP_TLS:-off}"
+    export SMTP_STARTTLS="${SMTP_STARTTLS:-off}"
+    export SMTP_USER="${SMTP_USER:-}"
+    export SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+    
+    # For Mailpit (default in dev), disable TLS/auth
+    if [ "$SMTP_HOST" = "mailpit" ]; then
+        export SMTP_AUTH="off"
+        export SMTP_TLS="off"
+        export SMTP_STARTTLS="off"
+    fi
+    
     envsubst_template /etc/msmtprc.template /etc/msmtprc
     chmod 600 /etc/msmtprc
 
