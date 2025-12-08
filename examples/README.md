@@ -87,6 +87,73 @@ docker-compose --profile dev up -d
 
 Access MailHog web UI at: http://localhost:8025
 
+### Troubleshooting Docker Compose
+
+#### Database Initialization Issues
+
+If the database doesn't initialize properly:
+
+```bash
+# Check initialization logs
+docker-compose logs php-fpm | grep init-db
+
+# Reset database and volumes
+docker-compose down -v
+docker-compose up -d
+```
+
+#### Config.json Not Found
+
+Ensure the `config.json.template` file exists in `php-fpm/` directory and rebuild:
+
+```bash
+docker-compose build php-fpm
+docker-compose up -d
+```
+
+#### Port Conflicts
+
+If ports 8080 or 8025 are already in use, edit `.env`:
+
+```bash
+HTTP_PORT=9090
+MAILHOG_WEB_PORT=9025
+```
+
+#### Database Connection Errors
+
+Check database health and logs:
+
+```bash
+docker-compose ps db
+docker-compose logs db
+
+# Wait for: "[Note] mariadbd: ready for connections"
+```
+
+#### Schema Cache Issues
+
+If you see database schema errors after changes:
+
+```bash
+docker-compose exec php-fpm php /var/www/html/yii cache/flush-schema db
+```
+
+#### Reset Everything
+
+To completely reset and start fresh:
+
+```bash
+# Stop and remove everything
+docker-compose down -v
+
+# Remove images (optional)
+docker-compose down --rmi all -v
+
+# Start fresh
+docker-compose up -d
+```
+
 ## Kubernetes Deployment
 
 ### Prerequisites
