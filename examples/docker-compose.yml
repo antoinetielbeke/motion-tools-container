@@ -1,22 +1,16 @@
-version: '3.8'
-
 services:
-  # MariaDB Database
   db:
     image: mariadb:11
-    container_name: motion-tools-db
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
       MYSQL_DATABASE: ${DB_NAME:-antragsgruen}
       MYSQL_USER: ${DB_USER:-antragsgruen}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-antragsgruen}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
     volumes:
       - db_data:/var/lib/mysql
-    networks:
-      - motion-tools
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 30s
@@ -24,30 +18,22 @@ services:
       retries: 5
       start_period: 30s
 
-  # Redis Cache (optional but recommended)
   redis:
     image: redis:7-alpine
-    container_name: motion-tools-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    networks:
-      - motion-tools
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 3s
       retries: 5
 
-  # PHP-FPM Application
   php-fpm:
-    # image: ghcr.io/yourusername/motion-tools-php:latest
-    # Build locally for development:
     build:
       context: ../php-fpm
       dockerfile: Dockerfile
-    container_name: motion-tools-php
     restart: unless-stopped
     depends_on:
       db:
@@ -55,171 +41,71 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # PHP Configuration
-      PHP_MEMORY_LIMIT: 512M
-      PHP_UPLOAD_MAX_FILESIZE: 32M
-      PHP_POST_MAX_SIZE: 40M
-      PHP_MAX_EXECUTION_TIME: 300
-      PHP_TIMEZONE: ${TIMEZONE:-UTC}
-
-      # PHP-FPM Configuration
-      PHP_FPM_PM: dynamic
-      PHP_FPM_MAX_CHILDREN: 50
-      PHP_FPM_START_SERVERS: 5
-      PHP_FPM_MIN_SPARE_SERVERS: 5
-      PHP_FPM_MAX_SPARE_SERVERS: 35
-
-      # Database Configuration
       DB_HOST: db
       DB_PORT: 3306
       DB_NAME: ${DB_NAME:-antragsgruen}
       DB_USER: ${DB_USER:-antragsgruen}
-      DB_PASSWORD: ${DB_PASSWORD:-antragsgruen}
-
-      # Redis Configuration
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-
-      # SMTP Configuration
-      SMTP_HOST: ${SMTP_HOST:-mailpit}
-      SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_AUTH_TYPE: ${SMTP_AUTH_TYPE:-none}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-noreply@localhost}
-      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Antragsgruen}
-
-      # Application Configuration
-      DOMAIN: ${DOMAIN:-localhost:8080}
-      PROTOCOL: ${PROTOCOL:-http}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost:8080}
+      APP_PROTOCOL: ${APP_PROTOCOL:-http}
       MULTISITE_MODE: ${MULTISITE_MODE:-false}
       BASE_LANGUAGE: ${BASE_LANGUAGE:-en}
       RANDOM_SEED: ${RANDOM_SEED}
-      
-      # Database Initialization (auto-init for development, disable for production)
-      AUTO_INIT_DB: ${AUTO_INIT_DB:-true}
-      ANTRAGSGRUEN_MODE: ${ANTRAGSGRUEN_MODE:-single-site}
-      DEFAULT_SITE_SUBDOMAIN: ${DEFAULT_SITE_SUBDOMAIN:-demo}
-      DEFAULT_SITE_TITLE: ${DEFAULT_SITE_TITLE:-Demo Site}
-      DEFAULT_SITE_ORG: ${DEFAULT_SITE_ORG:-Demo Organization}
-      DEFAULT_CONSULTATION_TITLE: ${DEFAULT_CONSULTATION_TITLE:-Main Consultation}
-      DEFAULT_CONSULTATION_PATH: ${DEFAULT_CONSULTATION_PATH:-main}
-
-      # Run migrations on startup (optional, not needed if AUTO_INIT_DB=true)
-      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
-
+      MAILER_DSN: ${MAILER_DSN:-smtp://mailpit:1025}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-noreply@localhost}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Antragsgruen}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
     volumes:
-      # Application code (shared with NGINX for static file serving)
-      - motion-tools-code:/var/www/html
-      # These specific mounts override the code volume for runtime data
+      - app_web:/var/www/html/web
       - app_runtime:/var/www/html/runtime
-      - app_assets:/var/www/html/web/assets
-      - app_config:/var/www/html/config
-    networks:
-      - motion-tools
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm-healthcheck || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1"]
+      interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 60s
+      start_period: 30s
 
-  # NGINX Web Server
   nginx:
-    # image: ghcr.io/yourusername/motion-tools-nginx:latest
-    # Build locally for development:
     build:
       context: ../nginx
       dockerfile: Dockerfile
-    container_name: motion-tools-nginx
     restart: unless-stopped
     depends_on:
       php-fpm:
         condition: service_healthy
     ports:
       - "${HTTP_PORT:-8080}:80"
-      # - "${HTTPS_PORT:-8443}:443"  # Uncomment for HTTPS
     environment:
-      # NGINX Configuration
-      NGINX_PORT: 80
-      NGINX_SERVER_NAME: ${DOMAIN:-_}
-      NGINX_WORKER_PROCESSES: auto
-      NGINX_WORKER_CONNECTIONS: 2048
-      NGINX_CLIENT_MAX_BODY_SIZE: 32M
-      NGINX_LOG_LEVEL: warn
-      NGINX_LOG_FORMAT: json
-
-      # PHP-FPM Backend
       PHP_FPM_HOST: php-fpm
       PHP_FPM_PORT: 9000
-
-      # Rate Limiting
-      NGINX_RATE_LIMIT: 10r/s
-      NGINX_RATE_LIMIT_BURST: 20
-
-      # Timeouts
+      NGINX_SERVER_NAME: ${APP_DOMAIN:-_}
+      NGINX_CLIENT_MAX_BODY_SIZE: 32M
       NGINX_FASTCGI_READ_TIMEOUT: 300s
       NGINX_FASTCGI_SEND_TIMEOUT: 300s
       NGINX_FASTCGI_CONNECT_TIMEOUT: 60s
-
-      # OpenTelemetry (optional)
-      # OTEL_EXPORTER_ENDPOINT: otel-collector:4317
-      # OTEL_SERVICE_NAME: motion-tools-nginx
-
-      # Wait for PHP-FPM (optional)
       WAIT_FOR_PHP_FPM: "true"
-
     volumes:
-      # Share entire application with PHP-FPM (read-only for nginx)
-      # This is needed so NGINX can check if files exist before passing to PHP-FPM
+      - app_web:/var/www/html/web:ro
       - app_runtime:/var/www/html/runtime:ro
-      - app_assets:/var/www/html/web/assets:ro
-      - app_config:/var/www/html/config:ro
-      # Mount the PHP-FPM application code (read-only)
-      # In production, consider using a shared volume or init container
-      - motion-tools-code:/var/www/html:ro
-      # Optionally mount custom SSL certificates:
-      # - ./ssl:/etc/nginx/ssl:ro
-    networks:
-      - motion-tools
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
 
-  # Mailpit for testing email (optional, for development)
   mailpit:
-    image: axllent/mailpit:latest
-    container_name: motion-tools-mailpit
+    image: axllent/mailpit
     restart: unless-stopped
     ports:
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"  # SMTP
-      - "${MAILPIT_WEB_PORT:-8025}:8025"   # Web UI
-    environment:
-      MP_MAX_MESSAGES: 5000
-      MP_SMTP_AUTH_ACCEPT_ANY: 1
-      MP_SMTP_AUTH_ALLOW_INSECURE: 1
-    networks:
-      - motion-tools
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
     profiles:
       - dev
 
 volumes:
   db_data:
-    driver: local
   redis_data:
-    driver: local
-  motion-tools-code:
-    driver: local
+  app_web:
   app_runtime:
-    driver: local
-  app_assets:
-    driver: local
-  app_config:
-    driver: local
-
-networks:
-  motion-tools:
-    driver: bridge

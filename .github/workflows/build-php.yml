@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - develop
     tags:
       - 'v*'
     paths:
@@ -13,16 +12,15 @@ on:
   pull_request:
     branches:
       - main
-      - develop
     paths:
       - 'php-fpm/**'
       - '.github/workflows/build-php.yml'
   workflow_dispatch:
     inputs:
       antragsgruen_version:
-        description: 'Antragsgruen version tag (e.g., v4.12.4)'
+        description: 'Antragsgruen version tag (e.g., v4.17-volt)'
         required: true
-        default: 'v4.12.4'
+        default: 'v4.17-volt'
 
 env:
   CLOUDSMITH_REGISTRY: docker.cloudsmith.io
@@ -46,10 +44,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
 
       - name: Log in to Cloudsmith Docker Registry
         if: github.event_name != 'pull_request'
@@ -65,26 +59,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.antragsgruen_version }}" >> $GITHUB_OUTPUT
           else
-            # Extract from Dockerfile or use default
-            VERSION=$(grep -oP 'ARG ANTRAGSGRUEN_VERSION=\K.*' php-fpm/Dockerfile | head -1 || echo "v4.12.4")
+            VERSION=$(grep -oP 'ARG ANTRAGSGRUEN_VERSION=\K.*' php-fpm/Dockerfile | head -1 || echo "v4.17-volt")
             echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Extract container version
-        id: container
-        run: |
-          # Extract container version from git tag if available
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-            # Expected format: v4.12.4+1 or 4.12.4+1
-            if [[ $TAG =~ \+([0-9]+)$ ]]; then
-              CONTAINER_VERSION="${BASH_REMATCH[1]}"
-              echo "version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
-            else
-              echo "version=1" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "version=1" >> $GITHUB_OUTPUT
           fi
 
       - name: Extract metadata
@@ -97,18 +73,14 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
-            type=raw,value=${{ steps.antragsgruen.outputs.version }},enable=${{ steps.container.outputs.version == '1' }}
+            type=raw,value=${{ steps.antragsgruen.outputs.version }}
           labels: |
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
-            org.opencontainers.image.description=PHP-FPM container for Antragsgruen
-            org.opencontainers.image.vendor=tielbeke
-            org.opencontainers.image.version=${{ steps.antragsgruen.outputs.version }}+${{ steps.container.outputs.version }}
-            io.cloudsmith.package.antragsgruen-version=${{ steps.antragsgruen.outputs.version }}
-            io.cloudsmith.package.container-version=${{ steps.container.outputs.version }}
+            org.opencontainers.image.description=PHP-FPM container for Antragsgruen with 12-factor env var support
+            org.opencontainers.image.version=${{ steps.antragsgruen.outputs.version }}
 
-      - name: Build and push to Cloudsmith
-        uses: docker/build-push-action@v5
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
           context: ./php-fpm
           file: ./php-fpm/Dockerfile
@@ -118,7 +90,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ANTRAGSGRUEN_VERSION=${{ steps.antragsgruen.outputs.version }}
-            PHP_VERSION=8.3
+            PHP_VERSION=8.4
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: false
