@@ -48,11 +48,21 @@ if [ -n "$DB_HOST" ]; then
                 echo "[entrypoint] Migrations marked as applied"
 
                 if [ "$MULTISITE_MODE" != "true" ] && [ "$MULTISITE_MODE" != "1" ]; then
+                    # Use configurable values with sensible defaults
+                    SITE_SUBDOMAIN="${SITE_SUBDOMAIN:-std}"
+                    SITE_TITLE="${SITE_TITLE:-Demo Site}"
+                    CONSULTATION_PATH="${CONSULTATION_PATH:-main}"
+                    CONSULTATION_TITLE="${CONSULTATION_TITLE:-Main Consultation}"
+                    CONSULTATION_TITLE_SHORT="${CONSULTATION_TITLE_SHORT:-Main}"
+
                     echo "[entrypoint] Single-site mode: creating default site..."
+                    echo "[entrypoint]   Site subdomain: $SITE_SUBDOMAIN"
+                    echo "[entrypoint]   Consultation path: /$CONSULTATION_PATH"
+
                     mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
-                        "INSERT INTO ${TABLE_PREFIX}site (id, subdomain, title, organization, status, dateCreation) VALUES (1, 'std', 'Demo Site', '', 0, NOW());"
+                        "INSERT INTO ${TABLE_PREFIX}site (id, subdomain, title, organization, status, dateCreation) VALUES (1, '$SITE_SUBDOMAIN', '$SITE_TITLE', '', 0, NOW());"
                     mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
-                        "INSERT INTO ${TABLE_PREFIX}consultation (id, siteId, urlPath, wordingBase, title, titleShort, amendmentNumbering, dateCreation, adminEmail, settings) VALUES (1, 1, 'main', '${BASE_LANGUAGE:-en}', 'Main Consultation', 'Main', 0, NOW(), '', '{}');"
+                        "INSERT INTO ${TABLE_PREFIX}consultation (id, siteId, urlPath, wordingBase, title, titleShort, amendmentNumbering, dateCreation, adminEmail, settings) VALUES (1, 1, '$CONSULTATION_PATH', '${BASE_LANGUAGE:-en}', '$CONSULTATION_TITLE', '$CONSULTATION_TITLE_SHORT', 0, NOW(), '', '{}');"
                     echo "[entrypoint] Default site created"
                 fi
             else
@@ -68,7 +78,29 @@ if [ -n "$DB_HOST" ]; then
     fi
 fi
 
-echo "[entrypoint] Configuration (env vars only, no config.json):"
+# Create minimal config.json for v4.17-volt environment variable support
+# The file must exist (index.php check), but can be empty - all config comes from env vars
+if [ ! -f /var/www/html/config/config.json ]; then
+    echo "[entrypoint] Creating minimal config.json for environment-only configuration..."
+
+    if [ "$MULTISITE_MODE" = "true" ] || [ "$MULTISITE_MODE" = "1" ]; then
+        # Multisite mode: empty config, everything from env vars
+        echo '{}' > /var/www/html/config/config.json
+    else
+        # Single-site mode: need siteSubdomain in config.json (no env var available for this)
+        # Use SITE_SUBDOMAIN env var with 'std' as default
+        SITE_SUBDOMAIN="${SITE_SUBDOMAIN:-std}"
+        cat > /var/www/html/config/config.json << EOF
+{
+  "multisiteMode": false,
+  "siteSubdomain": "$SITE_SUBDOMAIN"
+}
+EOF
+    fi
+    echo "[entrypoint] config.json created (all other settings from environment variables)"
+fi
+
+echo "[entrypoint] Configuration mode: environment variables + minimal config.json"
 echo "  DB_HOST: ${DB_HOST:-not set}"
 echo "  REDIS_HOST: ${REDIS_HOST:-not set}"
 echo "  APP_DOMAIN: ${APP_DOMAIN:-not set}"

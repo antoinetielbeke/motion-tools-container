@@ -57,6 +57,12 @@ services:
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-noreply@localhost}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Antragsgruen}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      # Single-site configuration
+      SITE_SUBDOMAIN: ${SITE_SUBDOMAIN:-std}
+      SITE_TITLE: ${SITE_TITLE:-Demo Site}
+      CONSULTATION_PATH: ${CONSULTATION_PATH:-main}
+      CONSULTATION_TITLE: ${CONSULTATION_TITLE:-Main Consultation}
+      CONSULTATION_TITLE_SHORT: ${CONSULTATION_TITLE_SHORT:-Main}
     volumes:
       - app_web:/var/www/html/web
       - app_runtime:/var/www/html/runtime
