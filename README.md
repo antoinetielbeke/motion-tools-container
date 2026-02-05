@@ -6,16 +6,16 @@ Based on **v4.17-volt** with native 12-factor environment variable support.
 
 ## Container Images
 
-Images are available on [Cloudsmith](https://cloudsmith.io/~tielbeke/repos/tielbeke/packages/):
+Images are available on [GitHub Container Registry](https://github.com/antoinetielbeke?tab=packages):
 
 ```bash
 # Pull specific version
-docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php:v4.17.0-volt+1
-docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx:v4.17.0-volt+1
+docker pull ghcr.io/antoinetielbeke/motion-tools-php:v4.17.0-volt+1
+docker pull ghcr.io/antoinetielbeke/motion-tools-nginx:v4.17.0-volt+1
 
 # Pull latest
-docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php:latest
-docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx:latest
+docker pull ghcr.io/antoinetielbeke/motion-tools-php:latest
+docker pull ghcr.io/antoinetielbeke/motion-tools-nginx:latest
 ```
 
 ### Versioning
@@ -200,7 +200,7 @@ Creating a new release:
 
 3. **Automated actions**:
    - GitHub Actions builds both images with multi-arch support (amd64, arm64)
-   - Images pushed to Cloudsmith with version tag and `latest`
+   - Images pushed to GitHub Container Registry with version tag and `latest`
    - GitHub Release created with auto-generated changelog
 
 **When to increment:**

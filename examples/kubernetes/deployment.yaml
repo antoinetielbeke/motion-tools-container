@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: php-fpm
-        image: docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php:latest
+        image: ghcr.io/antoinetielbeke/motion-tools-php:latest
         ports:
         - containerPort: 9000
         envFrom:
@@ -80,7 +80,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx:latest
+        image: ghcr.io/antoinetielbeke/motion-tools-nginx:latest
         ports:
         - containerPort: 80
         env:

@@ -21,7 +21,7 @@ commonLabels:
 
 # Example: Override image tags
 # images:
-#   - name: docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php
+#   - name: ghcr.io/antoinetielbeke/motion-tools-php
 #     newTag: v4.17.0-volt+1
-#   - name: docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx
+#   - name: ghcr.io/antoinetielbeke/motion-tools-nginx
 #     newTag: v4.17.0-volt+1
