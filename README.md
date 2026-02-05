@@ -4,6 +4,41 @@ Container images for [Antragsgruen](https://github.com/CatoTH/antragsgruen/) - a
 
 Based on **v4.17-volt** with native 12-factor environment variable support.
 
+## Container Images
+
+Images are available on [Cloudsmith](https://cloudsmith.io/~tielbeke/repos/tielbeke/packages/):
+
+```bash
+# Pull specific version
+docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php:v4.17.0-volt+1
+docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx:v4.17.0-volt+1
+
+# Pull latest
+docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-php:latest
+docker pull docker.cloudsmith.io/tielbeke/tielbeke/motion-tools-nginx:latest
+```
+
+### Versioning
+
+Container releases follow semantic versioning: `v{upstream}+{build}`
+
+```
+v4.17.0-volt+1
+│ │   │ │    │
+│ │   │ │    └── Container build number (resets on upstream bump)
+│ │   │ └─────── Pre-release identifier (custom branch/fork)
+│ │   └───────── Patch version (added if missing)
+│ └───────────── Minor version
+└─────────────── 'v' prefix
+```
+
+**Examples:**
+- `v4.18.0+1` - Official Antragsgruen v4.18 release, first container build
+- `v4.17.0-volt+1` - Custom volt branch/fork, first container build
+- `v4.17.0-volt+2` - Same upstream, second container build (entrypoint fix, dependency update, etc.)
+
+**Note:** The Antragsgruen version in Dockerfile (`ARG ANTRAGSGRUEN_VERSION=v4.17-volt`) is the upstream git tag being built. The container release tag (e.g., `v4.17.0-volt+1`) is applied when creating a GitHub release.
+
 ## Architecture
 
 - **PHP-FPM Container**: PHP 8.4 on Alpine, handles application logic
@@ -138,6 +173,39 @@ docker build -t motion-tools-php:local ./php-fpm
 # NGINX
 docker build -t motion-tools-nginx:local ./nginx
 ```
+
+## Release Process
+
+Creating a new release:
+
+1. **Update Antragsgruen version** (if needed):
+   ```bash
+   # Edit php-fpm/Dockerfile and nginx/Dockerfile
+   ARG ANTRAGSGRUEN_VERSION=v4.18-volt
+   ```
+
+2. **Create and push a git tag**:
+   ```bash
+   # For official release (e.g., Antragsgruen v4.18)
+   git tag v4.18.0+1
+
+   # For custom branch (e.g., volt fork)
+   git tag v4.17.0-volt+1
+
+   # For container-only changes
+   git tag v4.17.0-volt+2
+
+   git push origin v4.18.0+1
+   ```
+
+3. **Automated actions**:
+   - GitHub Actions builds both images with multi-arch support (amd64, arm64)
+   - Images pushed to Cloudsmith with version tag and `latest`
+   - GitHub Release created with auto-generated changelog
+
+**When to increment:**
+- New Antragsgruen version/branch → `v4.18.0+1` or `v4.18.0-volt+1`
+- Container fix (entrypoint, dependencies, etc.) → increment build number (`+2`, `+3`, etc.)
 
 ## Troubleshooting
 
