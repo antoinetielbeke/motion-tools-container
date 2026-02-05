@@ -2,7 +2,7 @@
 ARG NGINX_VERSION=1.27-alpine-otel
 ARG ANTRAGSGRUEN_VERSION=v4.17-volt
 
-FROM nginx:${NGINX_VERSION}
+FROM public.ecr.aws/docker/library/nginx:${NGINX_VERSION}
 
 ARG ANTRAGSGRUEN_VERSION
 LABEL org.opencontainers.image.title="Motion Tools NGINX" \
