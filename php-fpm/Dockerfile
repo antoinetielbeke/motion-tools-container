@@ -2,7 +2,7 @@
 ARG PHP_VERSION=8.4
 ARG ANTRAGSGRUEN_VERSION=v4.17-volt
 
-FROM public.ecr.aws/docker/library/php:${PHP_VERSION}-fpm-alpine AS builder
+FROM php:${PHP_VERSION}-fpm-alpine AS builder
 
 ARG ANTRAGSGRUEN_VERSION
 
@@ -34,7 +34,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         xml \
         mbstring
 
-COPY --from=public.ecr.aws/docker/library/composer:2 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /build
 
@@ -57,7 +57,7 @@ RUN npm ci --production=false \
 RUN mkdir -p runtime/cache runtime/logs web/assets \
     && chmod -R 777 runtime web/assets
 
-FROM public.ecr.aws/docker/library/php:${PHP_VERSION}-fpm-alpine AS runtime
+FROM php:${PHP_VERSION}-fpm-alpine AS runtime
 
 ARG ANTRAGSGRUEN_VERSION
 LABEL org.opencontainers.image.title="Motion Tools PHP-FPM" \
