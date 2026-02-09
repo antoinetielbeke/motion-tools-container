@@ -10,8 +10,8 @@ Images are available on [GitHub Container Registry](https://github.com/antoineti
 
 ```bash
 # Pull specific version
-docker pull ghcr.io/antoinetielbeke/motion-tools-php:v4.17.0-volt+1
-docker pull ghcr.io/antoinetielbeke/motion-tools-nginx:v4.17.0-volt+1
+docker pull ghcr.io/antoinetielbeke/motion-tools-php:v4.17.0-volt.1
+docker pull ghcr.io/antoinetielbeke/motion-tools-nginx:v4.17.0-volt.1
 
 # Pull latest
 docker pull ghcr.io/antoinetielbeke/motion-tools-php:latest
@@ -20,24 +20,24 @@ docker pull ghcr.io/antoinetielbeke/motion-tools-nginx:latest
 
 ### Versioning
 
-Container releases follow semantic versioning: `v{upstream}+{build}`
+Container releases follow semantic versioning: `v{upstream}.{build}`
 
 ```
-v4.17.0-volt+1
-│ │   │ │    │
-│ │   │ │    └── Container build number (resets on upstream bump)
-│ │   │ └─────── Pre-release identifier (custom branch/fork)
-│ │   └───────── Patch version (added if missing)
-│ └───────────── Minor version
-└─────────────── 'v' prefix
+v4.17.0-volt.1
+│ │   │ │   │
+│ │   │ │   └── Container build number (resets on upstream bump)
+│ │   │ └────── Pre-release identifier (custom branch/fork)
+│ │   └──────── Patch version (added if missing)
+│ └──────────── Minor version
+└────────────── 'v' prefix
 ```
 
 **Examples:**
-- `v4.18.0+1` - Official Antragsgruen v4.18 release, first container build
-- `v4.17.0-volt+1` - Custom volt branch/fork, first container build
-- `v4.17.0-volt+2` - Same upstream, second container build (entrypoint fix, dependency update, etc.)
+- `v4.18.0.1` - Official Antragsgruen v4.18 release, first container build
+- `v4.17.0-volt.1` - Custom volt branch/fork, first container build
+- `v4.17.0-volt.2` - Same upstream, second container build (entrypoint fix, dependency update, etc.)
 
-**Note:** The Antragsgruen version in Dockerfile (`ARG ANTRAGSGRUEN_VERSION=v4.17-volt`) is the upstream git tag being built. The container release tag (e.g., `v4.17.0-volt+1`) is applied when creating a GitHub release.
+**Note:** The Antragsgruen version in Dockerfile (`ARG ANTRAGSGRUEN_VERSION=v4.17-volt`) is the upstream git tag being built. The container release tag (e.g., `v4.17.0-volt.1`) is applied when creating a GitHub release.
 
 ## Architecture
 
@@ -187,15 +187,15 @@ Creating a new release:
 2. **Create and push a git tag**:
    ```bash
    # For official release (e.g., Antragsgruen v4.18)
-   git tag v4.18.0+1
+   git tag v4.18.0.1
 
    # For custom branch (e.g., volt fork)
-   git tag v4.17.0-volt+1
+   git tag v4.17.0-volt.1
 
    # For container-only changes
-   git tag v4.17.0-volt+2
+   git tag v4.17.0-volt.2
 
-   git push origin v4.18.0+1
+   git push origin v4.18.0.1
    ```
 
 3. **Automated actions**:
@@ -204,8 +204,8 @@ Creating a new release:
    - GitHub Release created with auto-generated changelog
 
 **When to increment:**
-- New Antragsgruen version/branch → `v4.18.0+1` or `v4.18.0-volt+1`
-- Container fix (entrypoint, dependencies, etc.) → increment build number (`+2`, `+3`, etc.)
+- New Antragsgruen version/branch → `v4.18.0.1` or `v4.18.0-volt.1`
+- Container fix (entrypoint, dependencies, etc.) → increment build number (`.2`, `.3`, etc.)
 
 ## Troubleshooting
 

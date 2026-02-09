@@ -25,4 +25,12 @@ if [ "${WAIT_FOR_PHP_FPM}" = "true" ]; then
     echo "[nginx] PHP-FPM is ready"
 fi
 
+# Root redirect (optional)
+if [ -n "$ROOT_REDIRECT" ]; then
+    sed -i "s|# __ROOT_REDIRECT__|location = / { return 302 $ROOT_REDIRECT; }|" /etc/nginx/conf.d/default.conf
+    echo "[nginx] Root redirect: / -> $ROOT_REDIRECT"
+else
+    sed -i '/# __ROOT_REDIRECT__/d' /etc/nginx/conf.d/default.conf
+fi
+
 echo "[nginx] Backend: ${PHP_FPM_HOST}:${PHP_FPM_PORT}"
