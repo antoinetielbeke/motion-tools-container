@@ -32,7 +32,17 @@ server {
         deny all;
     }
 
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2)$ {
+    # In multisite mode, dynamic CSS (e.g. /std/styles-{hash}.css) uses relative
+    # font/asset paths that resolve to /{site}/fonts/..., /{site}/css/..., etc.
+    # Rewrite these to strip the site prefix and serve from the web root.
+    location ~ ^/[^/]+/(fonts|css|img|favicons|npm)/(.*) {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+        try_files $uri /$1/$2 =404;
+    }
+
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
         expires 7d;
         add_header Cache-Control "public, immutable";
         access_log off;
