@@ -1,16 +1,16 @@
-# Upstream Fixes TODO for True Environment-Only Configuration
+# Upstream Fixes TODO
 
-This document tracks issues that need to be fixed in Antragsgruen upstream to enable **true** environment-variable-only deployment without requiring any `config.json` file.
+This document tracks issues that need to be fixed in Antragsgruen upstream to enable **true** environment-variable-only deployment without requiring any `config.json` file, and to fix bugs in the generic_sso OIDC plugin.
 
 ## Current Status (v4.17-volt)
 
 The v4.17-volt tag adds environment variable support, but `config.json` is still required to exist (even if minimal). This defeats the purpose of 12-factor app deployment.
 
-**Workaround**: The docker-entrypoint.sh automatically creates a minimal config.json with just `siteSubdomain` setting.
+**Workaround**: The docker-entrypoint.sh automatically creates a minimal config.json with just `siteSubdomain` and `plugins` settings.
 
 ---
 
-## Issues to Fix Upstream
+## Environment Configuration Issues
 
 ### 1. **CRITICAL: index.php requires config.json to exist**
 
@@ -142,13 +142,133 @@ Document which is the canonical name and deprecate aliases, or clearly document 
 
 ---
 
+## OIDC / Generic SSO Plugin Issues
+
+### 6. **CRITICAL: `league/oauth2-client` not in composer require**
+
+**File**: `composer.json`
+
+**Problem**:
+The `generic_sso` plugin uses `League\OAuth2\Client\Provider\GenericProvider` in `OidcProvider.php`, but `league/oauth2-client` is only listed in the `suggest` section of `composer.json`, not in `require`. A standard `composer install --no-dev` will not install it, so enabling the plugin causes:
+```
+Error: Class "League\OAuth2\Client\Provider\GenericProvider" not found
+  in plugins/generic_sso/OidcProvider.php:34
+```
+
+**Solution Needed**:
+Move `league/oauth2-client` from `suggest` to `require` (or at minimum `require` it conditionally when the plugin is enabled). Since the plugin ships with the codebase, its dependencies should be installable:
+```json
+{
+  "require": {
+    "league/oauth2-client": "^2.7"
+  }
+}
+```
+
+**Workaround**: Dockerfile runs `composer require league/oauth2-client` after the main install.
+
+**Impact**: HIGH - Plugin is completely broken without this dependency
+
+---
+
+### 7. **HIGH: ExitException caught during OIDC redirect in LoginController**
+
+**File**: `plugins/generic_sso/controllers/LoginController.php`
+**Method**: `performLoginAndRedirect()`
+
+**Problem**:
+The method wraps the SSO login flow in a `catch (\Exception $e)` block. During the OIDC authorization redirect, the `SsoLogin::performLoginAndReturnUser()` method calls `\Yii::$app->end()` which throws a `\yii\base\ExitException` (extending `\Exception`) to cleanly terminate the request after sending the 302 redirect. The generic catch inadvertently catches this, treating a successful redirect as an error and showing a 500 error page instead.
+
+**Solution Needed**:
+Add an explicit catch for `ExitException` before the generic catch:
+```php
+try {
+    $loginProvider = Module::getDedicatedLoginProvider();
+    $loginProvider->performLoginAndReturnUser();
+    // ...
+} catch (\yii\base\ExitException $e) {
+    throw $e;
+} catch (\Exception $e) {
+    \Yii::error('SSO Login Error: ' . $e->getMessage());
+    // ...
+}
+```
+
+**Workaround**: Dockerfile `sed` patch adds the `ExitException` catch clause.
+
+**Impact**: HIGH - SSO login always fails without this fix
+
+---
+
+### 8. **HIGH: `OidcProvider` constructor expects `urlResourceOwnerDetails` but `generic_sso.json` config uses `urlUserInfo`**
+
+**File**: `plugins/generic_sso/OidcProvider.php`
+**Line**: 29
+
+**Problem**:
+The `OidcProvider` constructor passes `$config['urlResourceOwnerDetails']` to `GenericProvider`, but when generating config from environment variables or manual configuration, the natural key name is `urlUserInfo` (matching the OIDC spec's "userinfo_endpoint"). The `discover()` static method returns both keys, but anyone creating a `generic_sso.json` config file would naturally only include `urlUserInfo`, causing:
+```
+Undefined array key "urlResourceOwnerDetails"
+```
+
+The `league/oauth2-client` `GenericProvider` requires the key `urlResourceOwnerDetails` (its own naming convention), creating a naming mismatch between the OIDC standard terminology and the library's API.
+
+**Solution Needed**:
+Accept either key with a fallback in the constructor:
+```php
+'urlResourceOwnerDetails' => $config['urlResourceOwnerDetails'] ?? $config['urlUserInfo'] ?? '',
+```
+
+**Workaround**: Entrypoint generates both `urlUserInfo` and `urlResourceOwnerDetails` in the config file.
+
+**Impact**: HIGH - SSO login fails with a 500 error without the workaround
+
+---
+
+### 9. **MEDIUM: `currentConsultationId` not set causes SSO callback crash**
+
+**File**: `controllers/Base.php`
+**Line**: 603
+
+**Problem**:
+When the `site` table has `currentConsultationId = NULL` (common on fresh installs where the site was created without setting it), any URL that resolves without an explicit `consultationPath` parameter crashes:
+```
+Attempt to read property "urlPath" on null in controllers/Base.php:603
+```
+
+This specifically affects the SSO callback URL (`/sso-callback`) which is registered at the domain root level (via `Module::getAllUrlRoutes()` using `$dom . 'sso-callback'`) and has no consultation path segment. The existing null-consultation handling at line 599 only checks for `UserController`, not plugin controllers.
+
+The `loadConsultation()` method assumes `$this->site->currentConsultation` is always non-null when `$consultationId` is empty, which is incorrect.
+
+**Solution Needed**:
+Add a null check before accessing the property:
+```php
+if ($consultationId === '') {
+    $consultationId = $this->site->currentConsultation
+        ? $this->site->currentConsultation->urlPath
+        : '';
+}
+```
+
+And/or extend the `UserController` check at line 599 to also handle plugin controllers that extend `Base`.
+
+**Workaround**: Entrypoint ensures `currentConsultationId` is set on fresh installs and auto-fixes existing sites. Dockerfile also patches `Base.php` as a safety net.
+
+**Impact**: MEDIUM - Affects any controller route registered at the domain root without a consultation path prefix
+
+---
+
 ## Priority Order for Fixes
 
-1. **Fix #1** (index.php check) - Without this, config.json must exist
-2. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
-3. **Fix #3** (Root URL handling) - Better UX but workaround exists
-4. **Fix #4** (Documentation) - Helps users understand capabilities
-5. **Fix #5** (Naming consistency) - Nice to have
+1. **Fix #6** (composer require league/oauth2-client) - Plugin is completely non-functional
+2. **Fix #7** (ExitException in LoginController) - SSO login always fails
+3. **Fix #8** (urlResourceOwnerDetails naming) - SSO login fails on config mismatch
+4. **Fix #1** (index.php check) - Without this, config.json must exist
+5. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
+6. **Fix #9** (currentConsultation null check) - Crash on root-level plugin routes
+7. **Fix #3** (Root URL handling) - Better UX but workaround exists
+8. **Fix #4** (Documentation) - Helps users understand capabilities
+9. **Fix #5** (Naming consistency) - Nice to have
 
 ---
 
@@ -156,6 +276,7 @@ Document which is the canonical name and deprecate aliases, or clearly document 
 
 After upstream fixes, verify:
 
+**Environment configuration:**
 - [ ] Application starts with NO config.json file present
 - [ ] Single-site mode works with SITE_SUBDOMAIN environment variable
 - [ ] Multi-site mode works with MULTISITE_MODE=true
@@ -164,6 +285,15 @@ After upstream fixes, verify:
 - [ ] Redis integration works with REDIS_* environment variables
 - [ ] Mail sending works with MAILER_DSN environment variable
 - [ ] Application domain and protocol work with APP_DOMAIN and APP_PROTOCOL
+
+**OIDC / SSO:**
+- [ ] `composer install --no-dev` installs `league/oauth2-client`
+- [ ] SSO login initiates redirect to OIDC provider (no ExitException catch)
+- [ ] SSO callback completes without crash (currentConsultation null-safe)
+- [ ] `generic_sso.json` with only `urlUserInfo` (no `urlResourceOwnerDetails`) works
+- [ ] User is created/logged in after successful OIDC flow
+- [ ] PKCE (S256) works correctly with Logto / other OIDC providers
+- [ ] Single logout redirects to provider's end_session_endpoint
 
 ---
 
@@ -190,5 +320,5 @@ When ready to fix upstream:
 
 ---
 
-**Last Updated**: 2026-02-02
-**Status**: Workaround implemented in motion-tools-container, upstream fixes pending
+**Last Updated**: 2026-02-16
+**Status**: Workarounds implemented in motion-tools-container (Dockerfile patches + entrypoint), upstream fixes pending

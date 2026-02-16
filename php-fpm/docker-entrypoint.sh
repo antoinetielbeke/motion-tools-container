@@ -60,7 +60,7 @@ if [ -n "$DB_HOST" ]; then
                     echo "[entrypoint]   Consultation path: /$CONSULTATION_PATH"
 
                     mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
-                        "INSERT INTO ${TABLE_PREFIX}site (id, subdomain, title, organization, status, dateCreation) VALUES (1, '$SITE_SUBDOMAIN', '$SITE_TITLE', '', 0, NOW());"
+                        "INSERT INTO ${TABLE_PREFIX}site (id, subdomain, title, organization, status, currentConsultationId, dateCreation) VALUES (1, '$SITE_SUBDOMAIN', '$SITE_TITLE', '', 0, 1, NOW());"
                     mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
                         "INSERT INTO ${TABLE_PREFIX}consultation (id, siteId, urlPath, wordingBase, title, titleShort, amendmentNumbering, dateCreation, adminEmail, settings) VALUES (1, 1, '$CONSULTATION_PATH', '${BASE_LANGUAGE:-en}', '$CONSULTATION_TITLE', '$CONSULTATION_TITLE_SHORT', 0, NOW(), '', '{}');"
                     echo "[entrypoint] Default site created"
@@ -76,6 +76,22 @@ if [ -n "$DB_HOST" ]; then
             }
         fi
     fi
+
+    # Ensure currentConsultationId is set on existing single-site installs
+    if [ "$MULTISITE_MODE" != "true" ] && [ "$MULTISITE_MODE" != "1" ]; then
+        TABLE_PREFIX="${TABLE_PREFIX:-${DB_TABLE_PREFIX:-}}"
+        CURRENT_CON=$(mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -e \
+            "SELECT currentConsultationId FROM ${TABLE_PREFIX}site WHERE id=1;" 2>/dev/null || true)
+        if [ -z "$CURRENT_CON" ] || [ "$CURRENT_CON" = "NULL" ]; then
+            FIRST_CON=$(mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -e \
+                "SELECT id FROM ${TABLE_PREFIX}consultation WHERE siteId=1 ORDER BY id LIMIT 1;" 2>/dev/null || true)
+            if [ -n "$FIRST_CON" ] && [ "$FIRST_CON" != "NULL" ]; then
+                echo "[entrypoint] Setting currentConsultationId=$FIRST_CON on site 1..."
+                mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
+                    "UPDATE ${TABLE_PREFIX}site SET currentConsultationId=$FIRST_CON WHERE id=1;" 2>/dev/null || true
+            fi
+        fi
+    fi
 fi
 
 # Create minimal config.json for v4.17-volt environment variable support
@@ -83,9 +99,19 @@ fi
 if [ ! -f /var/www/html/config/config.json ]; then
     echo "[entrypoint] Creating minimal config.json for environment-only configuration..."
 
+    # Build plugins array
+    PLUGINS_JSON="[]"
+    if [ "$OIDC_ENABLED" = "true" ] || [ "$OIDC_ENABLED" = "1" ]; then
+        PLUGINS_JSON='["generic_sso"]'
+    fi
+
     if [ "$MULTISITE_MODE" = "true" ] || [ "$MULTISITE_MODE" = "1" ]; then
-        # Multisite mode: empty config, everything from env vars
-        echo '{}' > /var/www/html/config/config.json
+        # Multisite mode: plugins only, everything else from env vars
+        cat > /var/www/html/config/config.json << EOF
+{
+  "plugins": $PLUGINS_JSON
+}
+EOF
     else
         # Single-site mode: need siteSubdomain in config.json (no env var available for this)
         # Use SITE_SUBDOMAIN env var with 'std' as default
@@ -93,7 +119,8 @@ if [ ! -f /var/www/html/config/config.json ]; then
         cat > /var/www/html/config/config.json << EOF
 {
   "multisiteMode": false,
-  "siteSubdomain": "$SITE_SUBDOMAIN"
+  "siteSubdomain": "$SITE_SUBDOMAIN",
+  "plugins": $PLUGINS_JSON
 }
 EOF
     fi
@@ -186,6 +213,7 @@ if [ "$OIDC_ENABLED" = "true" ] || [ "$OIDC_ENABLED" = "1" ]; then
     "urlAuthorize": $(echo "$OIDC_URL_AUTHORIZE" | jq -R .),
     "urlAccessToken": $(echo "$OIDC_URL_TOKEN" | jq -R .),
     "urlUserInfo": $(echo "$OIDC_URL_USERINFO" | jq -R .),
+    "urlResourceOwnerDetails": $(echo "$OIDC_URL_USERINFO" | jq -R .),
     "urlLogout": $(echo "$OIDC_URL_LOGOUT" | jq -R .),
     "issuer": $(echo "$OIDC_ISSUER" | jq -R .),
     "scopes": $SCOPES_JSON,
@@ -207,6 +235,40 @@ SSOEOF
     chown www-data:www-data "$SSO_CONFIG_FILE"
 
     echo "[entrypoint] OIDC configuration written to $SSO_CONFIG_FILE"
+
+    # Ensure the generic_sso plugin is registered in config.json
+    if [ -f /var/www/html/config/config.json ]; then
+        HAS_PLUGIN=$(jq -r '.plugins // [] | index("generic_sso") // empty' /var/www/html/config/config.json 2>/dev/null)
+        if [ -z "$HAS_PLUGIN" ]; then
+            echo "[entrypoint] Adding generic_sso plugin to config.json..."
+            jq '.plugins = ((.plugins // []) + ["generic_sso"] | unique)' /var/www/html/config/config.json > /var/www/html/config/config.json.tmp \
+                && mv /var/www/html/config/config.json.tmp /var/www/html/config/config.json
+        fi
+    fi
+
+    # Enable external login (LOGIN_EXTERNAL=3) on existing sites that don't have it yet
+    if [ -n "$DB_HOST" ]; then
+        TABLE_PREFIX="${TABLE_PREFIX:-${DB_TABLE_PREFIX:-}}"
+        # Get current site settings
+        SITE_SETTINGS=$(mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -e \
+            "SELECT settings FROM ${TABLE_PREFIX}site WHERE id=1;" 2>/dev/null || true)
+
+        if [ -n "$SITE_SETTINGS" ] && [ "$SITE_SETTINGS" != "NULL" ]; then
+            # Site exists with settings - check if loginMethods includes 3
+            HAS_EXTERNAL=$(echo "$SITE_SETTINGS" | jq -r '.loginMethods // [] | index(3) // empty' 2>/dev/null)
+            if [ -z "$HAS_EXTERNAL" ]; then
+                echo "[entrypoint] Enabling external login (SSO) on site..."
+                NEW_SETTINGS=$(echo "$SITE_SETTINGS" | jq -c '.loginMethods = ((.loginMethods // [0]) + [3] | unique)')
+                mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
+                    "UPDATE ${TABLE_PREFIX}site SET settings='$NEW_SETTINGS' WHERE id=1;" 2>/dev/null || true
+            fi
+        else
+            # Site exists but settings is NULL - set loginMethods with standard + external
+            echo "[entrypoint] Setting login methods (standard + SSO) on site..."
+            mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
+                "UPDATE ${TABLE_PREFIX}site SET settings='{\"loginMethods\":[0,3]}' WHERE id=1;" 2>/dev/null || true
+        fi
+    fi
 fi
 
 echo "[entrypoint] Configuration mode: environment variables + minimal config.json"

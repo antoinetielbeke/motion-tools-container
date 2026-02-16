@@ -49,6 +49,12 @@ RUN composer install \
     --optimize-autoloader \
     --prefer-dist
 
+# Install optional OIDC dependency (suggested by antragsgruen for SSO support)
+RUN composer require league/oauth2-client \
+    --no-interaction \
+    --no-progress \
+    --prefer-dist
+
 RUN npm ci --production=false \
     && npm run build \
     && rm -rf node_modules \
@@ -86,6 +92,15 @@ RUN apk add --no-cache \
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 COPY --from=builder --chown=www-data:www-data /build /var/www/html
+
+# Patch: Fix SSO LoginController to not catch Yii ExitException during OIDC redirect
+RUN sed -i 's/} catch (\\Exception $e) {/} catch (\\yii\\base\\ExitException $e) {\n            throw $e;\n        } catch (\\Exception $e) {/' \
+    /var/www/html/plugins/generic_sso/controllers/LoginController.php
+
+# Patch: Fix Base.php to handle null currentConsultation when consultationId is empty
+# (happens on SSO callback URL /sso-callback which has no consultation path prefix)
+RUN sed -i 's/$consultationId = $this->site->currentConsultation->urlPath;/$consultationId = $this->site->currentConsultation ? $this->site->currentConsultation->urlPath : "";/' \
+    /var/www/html/controllers/Base.php
 
 RUN echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
     && echo "upload_max_filesize=32M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
