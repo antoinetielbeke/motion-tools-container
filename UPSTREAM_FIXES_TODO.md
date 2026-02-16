@@ -258,6 +258,41 @@ And/or extend the `UserController` check at line 599 to also handle plugin contr
 
 ---
 
+### 10. **MEDIUM: SSO plugin does not link existing local accounts by email**
+
+**File**: `plugins/generic_sso/SsoLogin.php`
+**Method**: `getOrCreateUser()`
+
+**Problem**:
+When a user who already has a local account (e.g. `auth = email:jane@example.com`) logs in via SSO for the first time, the plugin only looks up users by the `auth` field (`generic-sso:<preferred_username>`). Since the existing local account has a different `auth` value, no match is found and a **new duplicate account** is created with the same email. The user's existing motions, amendments, and permissions remain on the old account.
+
+If the database has a `UNIQUE` constraint on the `email` column, the `$user->save()` call will fail with an exception instead.
+
+**Solution Needed**:
+Add an optional email-based fallback when no auth match is found:
+```php
+$user = User::findOne(['auth' => $auth]);
+
+if (!$user && !empty($userData['email'])) {
+    $user = User::findOne(['email' => $userData['email']]);
+    if ($user) {
+        \Yii::info('SSO: Linking existing account ' . $userData['email'] . ' to auth ' . $auth, 'generic_sso');
+        $user->auth = $auth;
+    }
+}
+
+if (!$user) {
+    $user = new User();
+```
+
+This should ideally be opt-in (e.g. via a config flag like `linkByEmail`) since it is only safe when the identity provider guarantees verified email addresses. If the IdP allows unverified/self-asserted emails, an attacker could claim someone else's email and hijack their account.
+
+**Workaround**: Dockerfile PHP patch injects email fallback, gated by `OIDC_LINK_BY_EMAIL=true` env var (default: disabled).
+
+**Impact**: MEDIUM - Causes duplicate accounts (or save errors) when migrating from local auth to SSO
+
+---
+
 ## Priority Order for Fixes
 
 1. **Fix #6** (composer require league/oauth2-client) - Plugin is completely non-functional
@@ -266,9 +301,10 @@ And/or extend the `UserController` check at line 599 to also handle plugin contr
 4. **Fix #1** (index.php check) - Without this, config.json must exist
 5. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
 6. **Fix #9** (currentConsultation null check) - Crash on root-level plugin routes
-7. **Fix #3** (Root URL handling) - Better UX but workaround exists
-8. **Fix #4** (Documentation) - Helps users understand capabilities
-9. **Fix #5** (Naming consistency) - Nice to have
+7. **Fix #10** (SSO email-based account linking) - Duplicate accounts on migration
+8. **Fix #3** (Root URL handling) - Better UX but workaround exists
+9. **Fix #4** (Documentation) - Helps users understand capabilities
+10. **Fix #5** (Naming consistency) - Nice to have
 
 ---
 
@@ -294,6 +330,8 @@ After upstream fixes, verify:
 - [ ] User is created/logged in after successful OIDC flow
 - [ ] PKCE (S256) works correctly with Logto / other OIDC providers
 - [ ] Single logout redirects to provider's end_session_endpoint
+- [ ] Existing local account is linked on first SSO login when `linkByEmail` is enabled
+- [ ] No account linking occurs when `linkByEmail` is disabled (default)
 
 ---
 

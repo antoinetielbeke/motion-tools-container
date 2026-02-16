@@ -99,6 +99,19 @@ COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 COPY --from=builder --chown=www-data:www-data /build /var/www/html
 
+# Patch: Allow SSO to link existing local accounts by email (opt-in via OIDC_LINK_BY_EMAIL env var).
+# When enabled, if no user is found by the SSO auth key, fall back to matching by email and re-link.
+# This is safe only when the IdP guarantees verified emails (e.g. Logto, Azure AD, Google).
+RUN php -r ' \
+    $file = "/var/www/html/plugins/generic_sso/SsoLogin.php"; \
+    $code = file_get_contents($file); \
+    $old = "\$user = User::findOne([\x27auth\x27 => \$auth]);\n\n        if (!\$user) {\n            \$user = new User();"; \
+    $new = "\$user = User::findOne([\x27auth\x27 => \$auth]);\n\n        // Email-based account linking (opt-in via OIDC_LINK_BY_EMAIL env var)\n        // When enabled, existing local accounts are linked to the SSO identity on first SSO login.\n        // Only safe when the identity provider guarantees verified email addresses.\n        if (!\$user && getenv(\x27OIDC_LINK_BY_EMAIL\x27) === \x27true\x27 && !empty(\$userData[\x27email\x27])) {\n            \$user = User::findOne([\x27email\x27 => \$userData[\x27email\x27]]);\n            if (\$user) {\n                \\Yii::info(\x27SSO: Linking existing account \x27 . \$userData[\x27email\x27] . \x27 to auth \x27 . \$auth, \x27generic_sso\x27);\n                \$user->auth = \$auth;\n            }\n        }\n\n        if (!\$user) {\n            \$user = new User();"; \
+    if (strpos($code, $old) === false) { echo "ERROR: patch target not found\n"; exit(1); } \
+    file_put_contents($file, str_replace($old, $new, $code)); \
+    echo "Patched SsoLogin.php with email-based account linking\n"; \
+    '
+
 # Patch: Fix SSO LoginController to not catch Yii ExitException during OIDC redirect
 RUN sed -i 's/} catch (\\Exception $e) {/} catch (\\yii\\base\\ExitException $e) {\n            throw $e;\n        } catch (\\Exception $e) {/' \
     /var/www/html/plugins/generic_sso/controllers/LoginController.php
