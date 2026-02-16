@@ -42,6 +42,18 @@ RUN git clone --depth 1 --branch ${ANTRAGSGRUEN_VERSION} \
     https://github.com/CatoTH/antragsgruen.git . \
     && rm -rf .git
 
+# Move league/oauth2-client from "suggest" to "require" before resolving
+# dependencies (upstream has it as optional but the generic_sso OIDC plugin
+# needs it at runtime).  Editing composer.json then deleting the lock lets
+# composer install do a single clean resolve without hitting the GitHub API
+# (which fails in CI without a token).
+RUN php -r ' \
+    $j = json_decode(file_get_contents("composer.json"), true); \
+    $j["require"]["league/oauth2-client"] = "^2.7"; \
+    file_put_contents("composer.json", json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"); \
+    ' \
+    && rm -f composer.lock
+
 RUN composer install \
     --no-dev \
     --no-interaction \
@@ -79,11 +91,22 @@ RUN apk add --no-cache \
     poppler-utils \
     mysql-client \
     netcat-openbsd \
-    fcgi
+    fcgi \
+    jq \
+    curl
 
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 COPY --from=builder --chown=www-data:www-data /build /var/www/html
+
+# Patch: Fix SSO LoginController to not catch Yii ExitException during OIDC redirect
+RUN sed -i 's/} catch (\\Exception $e) {/} catch (\\yii\\base\\ExitException $e) {\n            throw $e;\n        } catch (\\Exception $e) {/' \
+    /var/www/html/plugins/generic_sso/controllers/LoginController.php
+
+# Patch: Fix Base.php to handle null currentConsultation when consultationId is empty
+# (happens on SSO callback URL /sso-callback which has no consultation path prefix)
+RUN sed -i 's/$consultationId = $this->site->currentConsultation->urlPath;/$consultationId = $this->site->currentConsultation ? $this->site->currentConsultation->urlPath : "";/' \
+    /var/www/html/controllers/Base.php
 
 RUN echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
     && echo "upload_max_filesize=32M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
