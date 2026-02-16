@@ -255,10 +255,11 @@ SSOEOF
 
         if [ -n "$SITE_SETTINGS" ] && [ "$SITE_SETTINGS" != "NULL" ]; then
             # Site exists with settings - check if loginMethods includes 3
-            HAS_EXTERNAL=$(echo "$SITE_SETTINGS" | jq -r '.loginMethods // [] | index(3) // empty' 2>/dev/null)
+            # Note: mariadb -N escapes newlines as literal \n, so use printf %b to decode
+            HAS_EXTERNAL=$(printf '%b\n' "$SITE_SETTINGS" | jq -r '.loginMethods // [] | index(3) // empty' 2>/dev/null) || true
             if [ -z "$HAS_EXTERNAL" ]; then
                 echo "[entrypoint] Enabling external login (SSO) on site..."
-                NEW_SETTINGS=$(echo "$SITE_SETTINGS" | jq -c '.loginMethods = ((.loginMethods // [0]) + [3] | unique)')
+                NEW_SETTINGS=$(printf '%b\n' "$SITE_SETTINGS" | jq -c '.loginMethods = ((.loginMethods // [0]) + [3] | unique)')
                 mariadb -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
                     "UPDATE ${TABLE_PREFIX}site SET settings='$NEW_SETTINGS' WHERE id=1;" 2>/dev/null || true
             fi
