@@ -42,17 +42,23 @@ RUN git clone --depth 1 --branch ${ANTRAGSGRUEN_VERSION} \
     https://github.com/CatoTH/antragsgruen.git . \
     && rm -rf .git
 
+# Move league/oauth2-client from "suggest" to "require" before resolving
+# dependencies (upstream has it as optional but the generic_sso OIDC plugin
+# needs it at runtime).  Editing composer.json then deleting the lock lets
+# composer install do a single clean resolve without hitting the GitHub API
+# (which fails in CI without a token).
+RUN php -r ' \
+    $j = json_decode(file_get_contents("composer.json"), true); \
+    $j["require"]["league/oauth2-client"] = "^2.7"; \
+    file_put_contents("composer.json", json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"); \
+    ' \
+    && rm -f composer.lock
+
 RUN composer install \
     --no-dev \
     --no-interaction \
     --no-progress \
     --optimize-autoloader \
-    --prefer-dist
-
-# Install optional OIDC dependency (suggested by antragsgruen for SSO support)
-RUN composer require league/oauth2-client \
-    --no-interaction \
-    --no-progress \
     --prefer-dist
 
 RUN npm ci --production=false \
