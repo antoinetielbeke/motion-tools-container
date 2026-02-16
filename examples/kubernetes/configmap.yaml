@@ -25,6 +25,7 @@ data:
   # OIDC_SINGLE_LOGOUT: "true"
   # OIDC_SYNC_GROUPS: "false"
   # OIDC_DISCOVERY: "true"
+  # OIDC_LINK_BY_EMAIL: "false"     # Enable to link existing local accounts by email on first SSO login
   # OIDC_ATTR_EMAIL: "email"
   # OIDC_ATTR_USERNAME: "preferred_username"
   # OIDC_ATTR_GIVEN_NAME: "given_name"
