@@ -79,7 +79,9 @@ RUN apk add --no-cache \
     poppler-utils \
     mysql-client \
     netcat-openbsd \
-    fcgi
+    fcgi \
+    jq \
+    curl
 
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
