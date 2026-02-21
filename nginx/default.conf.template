@@ -15,7 +15,7 @@ server {
     charset utf-8;
     client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
 
-    access_log /var/log/nginx/access.log;
+    access_log /var/log/nginx/access.log ${NGINX_LOG_FORMAT};
     error_log /var/log/nginx/error.log warn;
 
     location /health {
@@ -52,10 +52,12 @@ server {
     # __ROOT_REDIRECT__
 
     location / {
+        otel_span_name "$request_method $uri";
         try_files $uri /index.php$is_args$args;
     }
 
     location ~ \.php$ {
+        otel_span_name "php $request_method $uri";
         try_files $uri =404;
         include fastcgi_params;
         fastcgi_pass php-fpm;
