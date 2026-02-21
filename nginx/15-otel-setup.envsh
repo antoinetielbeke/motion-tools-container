@@ -1,7 +1,7 @@
 # OpenTelemetry conditional setup
 # Sourced (not executed) — env vars persist to template processing in step 20
 
-if [ -z "${OTEL_EXPORTER_ENDPOINT}" ]; then
+if [ -z "${OTEL_EXPORTER_ENDPOINT:-}" ]; then
     echo "[otel-setup] OTEL_EXPORTER_ENDPOINT not set, disabling OpenTelemetry"
     rm -f /etc/nginx/templates/otel.conf.template
 else

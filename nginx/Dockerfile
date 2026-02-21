@@ -10,15 +10,17 @@ LABEL org.opencontainers.image.title="Motion Tools NGINX" \
       org.opencontainers.image.version="${ANTRAGSGRUEN_VERSION}" \
       org.opencontainers.image.source="https://github.com/CatoTH/antragsgruen"
 
-RUN apk add --no-cache gettext netcat-openbsd
+RUN apk add --no-cache gettext netcat-openbsd \
+    && sed -i '1i load_module modules/ngx_otel_module.so;' /etc/nginx/nginx.conf
 
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY otel.conf.template /etc/nginx/templates/otel.conf.template
-COPY logging.conf.template /etc/nginx/templates/logging.conf.template
+COPY 00-logging.conf.template /etc/nginx/templates/00-logging.conf.template
 COPY 15-otel-setup.envsh /docker-entrypoint.d/15-otel-setup.envsh
 COPY docker-entrypoint.sh /docker-entrypoint.d/40-motion-tools-setup.sh
 
-RUN chmod +x /docker-entrypoint.d/40-motion-tools-setup.sh \
+RUN chmod +x /docker-entrypoint.d/15-otel-setup.envsh \
+    && chmod +x /docker-entrypoint.d/40-motion-tools-setup.sh \
     && mkdir -p /var/www/html/web \
     && chown -R nginx:nginx /var/www/html
 
