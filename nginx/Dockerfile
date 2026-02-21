@@ -13,6 +13,9 @@ LABEL org.opencontainers.image.title="Motion Tools NGINX" \
 RUN apk add --no-cache gettext netcat-openbsd
 
 COPY default.conf.template /etc/nginx/templates/default.conf.template
+COPY otel.conf.template /etc/nginx/templates/otel.conf.template
+COPY logging.conf.template /etc/nginx/templates/logging.conf.template
+COPY 15-otel-setup.envsh /docker-entrypoint.d/15-otel-setup.envsh
 COPY docker-entrypoint.sh /docker-entrypoint.d/40-motion-tools-setup.sh
 
 RUN chmod +x /docker-entrypoint.d/40-motion-tools-setup.sh \

@@ -34,3 +34,7 @@ else
 fi
 
 echo "[nginx] Backend: ${PHP_FPM_HOST}:${PHP_FPM_PORT}"
+if [ -n "${OTEL_EXPORTER_ENDPOINT}" ]; then
+    echo "[nginx] OTel: ${OTEL_EXPORTER_ENDPOINT} (${OTEL_SERVICE_NAME:-motion-tools-nginx})"
+fi
+echo "[nginx] Log format: ${NGINX_LOG_FORMAT:-main}"

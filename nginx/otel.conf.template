@@ -1,0 +1,17 @@
+# OpenTelemetry configuration for Motion Tools NGINX
+# Removed at startup by 15-otel-setup.envsh when OTEL_EXPORTER_ENDPOINT is not set
+
+otel_exporter {
+    endpoint ${OTEL_EXPORTER_ENDPOINT};
+    interval 5s;
+    batch_size 512;
+    batch_count 4;
+}
+
+otel_service_name ${OTEL_SERVICE_NAME};
+otel_resource_attr service.namespace ${OTEL_SERVICE_NAMESPACE};
+otel_resource_attr deployment.environment ${OTEL_DEPLOYMENT_ENVIRONMENT};
+
+# Enable tracing for all requests
+otel_trace on;
+otel_trace_context propagate;

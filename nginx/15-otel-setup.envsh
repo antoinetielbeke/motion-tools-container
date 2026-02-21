@@ -1,0 +1,15 @@
+# OpenTelemetry conditional setup
+# Sourced (not executed) — env vars persist to template processing in step 20
+
+if [ -z "${OTEL_EXPORTER_ENDPOINT}" ]; then
+    echo "[otel-setup] OTEL_EXPORTER_ENDPOINT not set, disabling OpenTelemetry"
+    rm -f /etc/nginx/templates/otel.conf.template
+else
+    echo "[otel-setup] OpenTelemetry enabled, endpoint: ${OTEL_EXPORTER_ENDPOINT}"
+    export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-motion-tools-nginx}"
+    export OTEL_SERVICE_NAMESPACE="${OTEL_SERVICE_NAMESPACE:-motion-tools}"
+    export OTEL_DEPLOYMENT_ENVIRONMENT="${OTEL_DEPLOYMENT_ENVIRONMENT:-production}"
+fi
+
+# Logging format default
+export NGINX_LOG_FORMAT="${NGINX_LOG_FORMAT:-main}"
