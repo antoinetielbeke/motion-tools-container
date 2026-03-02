@@ -57,7 +57,7 @@ server {
     }
 
     location ~ \.php$ {
-        otel_span_name "php $request_method $uri";
+        otel_span_name "php $request_method $request_uri";
         try_files $uri =404;
         include fastcgi_params;
         fastcgi_pass php-fpm;

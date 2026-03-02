@@ -1,6 +1,6 @@
 # Upstream Fixes TODO
 
-This document tracks issues that need to be fixed in Antragsgruen upstream to enable **true** environment-variable-only deployment without requiring any `config.json` file, and to fix bugs in the generic_sso OIDC plugin.
+This document tracks issues that need to be fixed in Antragsgruen upstream to enable **true** environment-variable-only deployment without requiring any `config.json` file, to fix bugs in the generic_sso OIDC plugin, and to improve observability (structured logging and OpenTelemetry instrumentation).
 
 ## Current Status (v4.17-volt)
 
@@ -293,6 +293,55 @@ This should ideally be opt-in (e.g. via a config flag like `linkByEmail`) since 
 
 ---
 
+## Observability Issues
+
+### 11. **MEDIUM: PHP-FPM has no structured logging**
+
+**Component**: PHP-FPM access/error log configuration
+
+**Problem**:
+All PHP-FPM logs have empty `severity_text` in SigNoz. They are unstructured access log lines like:
+```
+::1 - 02/Mar/2026:23:09:39 +0000 "GET /index.php" 200
+```
+
+SigNoz cannot distinguish errors from normal access. PHP errors, warnings, and fatals are invisible in the logging pipeline — they either go to stderr (not collected) or are mixed into the unstructured access log without any severity indicator.
+
+**Solution Needed**:
+Configure PHP-FPM `error_log` and `access.format` to emit structured JSON with severity levels. For example:
+```ini
+; php-fpm pool config
+access.format = '{"severity_text":"%{REQUEST_METHOD}e","status":"%s","duration":"%d","uri":"%r","method":"%m"}'
+```
+
+Alternatively, use the OpenTelemetry PHP logging bridge to send logs directly to the OTel collector with proper severity.
+
+**Impact**: MEDIUM - Cannot filter or alert on PHP errors in SigNoz dashboards
+
+---
+
+### 12. **LOW: No PHP OpenTelemetry instrumentation (suggestion/feature request)**
+
+**Component**: PHP application layer (Yii2 framework)
+
+**Problem**:
+Only NGINX has OTel traces. This means:
+- All PHP requests appear as `php GET /index.php` — the actual Yii2 route (e.g., `pages/show-page`) is invisible
+- `has_error` is always `false` — NGINX OTel doesn't propagate PHP error status to the span
+- No visibility into application internals (DB queries, template rendering, cache hits)
+- No `http.route` attribute from the Yii2 router
+
+**Solution Needed**:
+Add OpenTelemetry PHP auto-instrumentation (`open-telemetry/opentelemetry-auto-yii` or generic auto-instrumentation). This would provide:
+- Actual Yii2 route names as span names
+- Database query spans (PDO instrumentation)
+- Proper error status propagation from PHP to the trace
+- PHP-level latency breakdown
+
+**Impact**: LOW - Enhancement/feature request, not a bug. Current NGINX-level tracing provides basic request visibility.
+
+---
+
 ## Priority Order for Fixes
 
 1. **Fix #6** (composer require league/oauth2-client) - Plugin is completely non-functional
@@ -302,9 +351,11 @@ This should ideally be opt-in (e.g. via a config flag like `linkByEmail`) since 
 5. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
 6. **Fix #9** (currentConsultation null check) - Crash on root-level plugin routes
 7. **Fix #10** (SSO email-based account linking) - Duplicate accounts on migration
-8. **Fix #3** (Root URL handling) - Better UX but workaround exists
-9. **Fix #4** (Documentation) - Helps users understand capabilities
-10. **Fix #5** (Naming consistency) - Nice to have
+8. **Fix #11** (PHP-FPM structured logging) - Cannot filter/alert on PHP errors in SigNoz
+9. **Fix #3** (Root URL handling) - Better UX but workaround exists
+10. **Fix #4** (Documentation) - Helps users understand capabilities
+11. **Fix #12** (PHP OTel instrumentation) - Enhancement for application-level trace visibility
+12. **Fix #5** (Naming consistency) - Nice to have
 
 ---
 
@@ -333,6 +384,10 @@ After upstream fixes, verify:
 - [ ] Existing local account is linked on first SSO login when `linkByEmail` is enabled
 - [ ] No account linking occurs when `linkByEmail` is disabled (default)
 
+**Observability:**
+- [ ] PHP-FPM logs have `severity_text` set for errors/warnings in SigNoz
+- [ ] PHP traces show actual Yii2 route names (not just `/index.php`)
+
 ---
 
 ## How to Use This Document
@@ -358,5 +413,5 @@ When ready to fix upstream:
 
 ---
 
-**Last Updated**: 2026-02-16
+**Last Updated**: 2026-03-03
 **Status**: Workarounds implemented in motion-tools-container (Dockerfile patches + entrypoint), upstream fixes pending
