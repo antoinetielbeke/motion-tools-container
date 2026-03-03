@@ -293,6 +293,52 @@ This should ideally be opt-in (e.g. via a config flag like `linkByEmail`) since 
 
 ---
 
+## Mail Configuration Issues
+
+### 13. **HIGH: `parseMailerDsn()` does not set `authType`, causing silent email failure**
+
+**File**: `models/settings/EnvironmentConfigLoader.php`
+**Method**: `parseMailerDsn()`
+
+**Problem**:
+When `MAILER_DSN` is set (e.g. `smtp://user:pass@host:587`), `parseMailerDsn()` builds a mail config array but omits the `authType` key. The `SMTP` transport constructor (`components/mail/SMTP.php:37-38`) requires `authType` and throws `ServerConfiguration('authType not set')` if it's missing.
+
+All callers in the notification system catch `MailNotSent | ServerConfiguration`, so the error is silently swallowed. **No notification emails are sent at all** — no amendment notifications, no user confirmations, nothing.
+
+```php
+// EnvironmentConfigLoader.php — current (broken)
+private static function parseMailerDsn(string $dsn): array
+{
+    $parts = parse_url($dsn);
+    $config = [
+        'transport' => 'smtp',
+        'host' => $parts['host'] ?? 'localhost',
+        'port' => $parts['port'] ?? 587,
+        'username' => isset($parts['user']) ? rawurldecode($parts['user']) : null,
+        'password' => isset($parts['pass']) ? rawurldecode($parts['pass']) : null,
+    ];
+    // ... encryption logic ...
+    return $config;  // NO authType!
+}
+```
+
+**Solution Needed**:
+Add `authType` to the returned config array, inferred from the DSN:
+```php
+// Determine authType from credentials
+if (!empty($config['username'])) {
+    $config['authType'] = 'LOGIN';
+} else {
+    $config['authType'] = 'none';
+}
+```
+
+**Workaround**: None — emails silently fail. Must be fixed in the upstream fork.
+
+**Impact**: HIGH - All email notifications are silently broken when using MAILER_DSN
+
+---
+
 ## Observability Issues
 
 ### 11. **MEDIUM: PHP-FPM has no structured logging**
@@ -347,15 +393,16 @@ Add OpenTelemetry PHP auto-instrumentation (`open-telemetry/opentelemetry-auto-y
 1. **Fix #6** (composer require league/oauth2-client) - Plugin is completely non-functional
 2. **Fix #7** (ExitException in LoginController) - SSO login always fails
 3. **Fix #8** (urlResourceOwnerDetails naming) - SSO login fails on config mismatch
-4. **Fix #1** (index.php check) - Without this, config.json must exist
-5. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
-6. **Fix #9** (currentConsultation null check) - Crash on root-level plugin routes
-7. **Fix #10** (SSO email-based account linking) - Duplicate accounts on migration
-8. **Fix #11** (PHP-FPM structured logging) - Cannot filter/alert on PHP errors in SigNoz
-9. **Fix #3** (Root URL handling) - Better UX but workaround exists
-10. **Fix #4** (Documentation) - Helps users understand capabilities
-11. **Fix #12** (PHP OTel instrumentation) - Enhancement for application-level trace visibility
-12. **Fix #5** (Naming consistency) - Nice to have
+4. **Fix #13** (parseMailerDsn missing authType) - All emails silently fail
+5. **Fix #1** (index.php check) - Without this, config.json must exist
+6. **Fix #2** (SITE_SUBDOMAIN env var) - Required for single-site env-only deployment
+7. **Fix #9** (currentConsultation null check) - Crash on root-level plugin routes
+8. **Fix #10** (SSO email-based account linking) - Duplicate accounts on migration
+9. **Fix #11** (PHP-FPM structured logging) - Cannot filter/alert on PHP errors in SigNoz
+10. **Fix #3** (Root URL handling) - Better UX but workaround exists
+11. **Fix #4** (Documentation) - Helps users understand capabilities
+12. **Fix #12** (PHP OTel instrumentation) - Enhancement for application-level trace visibility
+13. **Fix #5** (Naming consistency) - Nice to have
 
 ---
 
@@ -370,7 +417,8 @@ After upstream fixes, verify:
 - [ ] Root URL (/) works correctly in both modes
 - [ ] All database operations work with DB_* environment variables
 - [ ] Redis integration works with REDIS_* environment variables
-- [ ] Mail sending works with MAILER_DSN environment variable
+- [ ] Mail sending works with MAILER_DSN environment variable (authType correctly inferred)
+- [ ] Amendment/motion notifications are actually sent (not silently swallowed)
 - [ ] Application domain and protocol work with APP_DOMAIN and APP_PROTOCOL
 
 **OIDC / SSO:**
