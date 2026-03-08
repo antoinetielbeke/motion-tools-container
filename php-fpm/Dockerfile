@@ -32,7 +32,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         exif \
         mysqli \
         xml \
-        mbstring
+        mbstring \
+    && pecl install opentelemetry protobuf \
+    && docker-php-ext-enable opentelemetry protobuf
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -53,6 +55,12 @@ RUN composer install \
     --prefer-dist
 
 RUN composer require league/oauth2-client:^2.7 \
+    open-telemetry/sdk:^1.0 \
+    open-telemetry/exporter-otlp:^1.0 \
+    open-telemetry/opentelemetry-auto-pdo:^0.0 \
+    open-telemetry/opentelemetry-auto-curl:^0.0 \
+    open-telemetry/opentelemetry-auto-guzzle:^0.0 \
+    php-http/guzzle7-adapter:^1.0 \
     --no-interaction \
     --no-progress \
     --prefer-dist \

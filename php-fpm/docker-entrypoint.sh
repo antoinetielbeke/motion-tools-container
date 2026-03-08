@@ -104,6 +104,9 @@ if [ ! -f /var/www/html/config/config.json ]; then
     if [ "$OIDC_ENABLED" = "true" ] || [ "$OIDC_ENABLED" = "1" ]; then
         PLUGINS_JSON='["generic_sso"]'
     fi
+    if [ "${OTEL_PHP_AUTOLOAD_ENABLED:-}" = "true" ]; then
+        PLUGINS_JSON=$(echo "$PLUGINS_JSON" | jq -c '. + ["opentelemetry"] | unique')
+    fi
 
     if [ "$MULTISITE_MODE" = "true" ] || [ "$MULTISITE_MODE" = "1" ]; then
         # Multisite mode: plugins only, everything else from env vars
@@ -270,6 +273,13 @@ SSOEOF
                 "UPDATE ${TABLE_PREFIX}site SET settings='{\"loginMethods\":[0,3]}' WHERE id=1;" 2>/dev/null || true
         fi
     fi
+fi
+
+# OpenTelemetry status
+if [ -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}" ] && [ "${OTEL_PHP_AUTOLOAD_ENABLED:-}" = "true" ]; then
+    echo "[entrypoint] OTel: ${OTEL_EXPORTER_OTLP_ENDPOINT} (${OTEL_SERVICE_NAME:-motion-tools-php})"
+else
+    echo "[entrypoint] OTel: disabled"
 fi
 
 echo "[entrypoint] Configuration mode: environment variables + minimal config.json"
