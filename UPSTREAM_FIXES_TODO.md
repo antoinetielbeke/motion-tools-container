@@ -333,7 +333,7 @@ if (!empty($config['username'])) {
 }
 ```
 
-**Workaround**: None — emails silently fail. Must be fixed in the upstream fork.
+**Workaround**: Dockerfile `php -r` patch injects authType inference into both `parseMailerDsn()` and `getMailServiceConfig()`.
 
 **Impact**: HIGH - All email notifications are silently broken when using MAILER_DSN
 

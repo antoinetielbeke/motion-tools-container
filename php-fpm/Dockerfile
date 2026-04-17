@@ -118,6 +118,29 @@ RUN sed -i 's/} catch (\\Exception $e) {/} catch (\\yii\\base\\ExitException $e)
 RUN sed -i 's/$consultationId = $this->site->currentConsultation->urlPath;/$consultationId = $this->site->currentConsultation ? $this->site->currentConsultation->urlPath : "";/' \
     /var/www/html/controllers/Base.php
 
+# Patch: Fix EnvironmentConfigLoader to infer authType from credentials.
+# Without this, SMTP transport throws ServerConfiguration('authType not set')
+# and all email notifications silently fail (both MAILER_DSN and SMTP_* paths).
+RUN php -r ' \
+    $file = "/var/www/html/models/settings/EnvironmentConfigLoader.php"; \
+    $code = file_get_contents($file); \
+    $authBlock = "\n\n        if (!empty(\$config[\x27username\x27])) {\n            \$config[\x27authType\x27] = \x27login\x27;\n        } else {\n            \$config[\x27authType\x27] = \x27none\x27;\n        }\n"; \
+    $old = "            \$config[\x27encryption\x27] = null;\n        }\n\n        return \$config;"; \
+    $new = "            \$config[\x27encryption\x27] = null;\n        }" . $authBlock . "\n        return \$config;"; \
+    if (strpos($code, $old) === false) { echo "ERROR: parseMailerDsn patch target not found\n"; exit(1); } \
+    $code = str_replace($old, $new, $code); \
+    $old2 = "        return [\n            \x27transport\x27 => \x27smtp\x27,"; \
+    $new2 = "        \$config = [\n            \x27transport\x27 => \x27smtp\x27,"; \
+    if (strpos($code, $old2) === false) { echo "ERROR: getMailServiceConfig return patch target not found\n"; exit(1); } \
+    $code = str_replace($old2, $new2, $code); \
+    $old3 = "            \x27encryption\x27 => self::getEnv(\x27SMTP_ENCRYPTION\x27, \x27tls\x27),\n        ];"; \
+    $new3 = "            \x27encryption\x27 => self::getEnv(\x27SMTP_ENCRYPTION\x27, \x27tls\x27),\n        ];" . $authBlock . "\n        return \$config;"; \
+    if (strpos($code, $old3) === false) { echo "ERROR: getMailServiceConfig authType patch target not found\n"; exit(1); } \
+    $code = str_replace($old3, $new3, $code); \
+    file_put_contents($file, $code); \
+    echo "Patched EnvironmentConfigLoader.php with authType inference\n"; \
+    '
+
 RUN echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
     && echo "upload_max_filesize=32M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
     && echo "post_max_size=40M" >> /usr/local/etc/php/conf.d/zz-antragsgruen.ini \
